@@ -957,9 +957,31 @@ $$ I=(i_1,i_2,\ldots,i_h), $$
 
 $$ t_j=\iota^{-1}(i_j). $$
 
+这一步与 UTF-8 解码不是同一种操作。$i_j$ 只是词表中的整数索引，其数值本身没有固定的字节语义；$t_j$ 才是该索引指向的词表 token。两者之间的类型关系是：
+
+$$ i_j\in\{0,\ldots,|\mathcal{V}_K|-1\}\xrightarrow{\ \iota^{-1}\ }t_j\in\mathcal{V}_K\xrightarrow{\ \beta\ }\beta(t_j)\in\mathbb{B}^{+}. $$
+
+必须先执行 $\iota^{-1}$，原因包括：
+
+1. Merge 生成的 token ID 可以大于 255，例如本例中 ID 262 对应 `lower`，262 不是合法单字节值；
+2. Token ID 只是人为编号，即使把整个词表重新编号，只要 $\iota$ 与 $\iota^{-1}$ 同步更新，tokenizer 的文本语义仍不变；
+3. 同一个 token 可能对应多个字节，例如 `lower` 对应 `6C 6F 77 65 72`，不能从整数 262 的数值直接推导出来。
+
+例如：
+
+| ID $i_j$ | 逆词表查询 $t_j=\iota^{-1}(i_j)$ | 底层字节串 $\beta(t_j)$ |
+|---:|---|---|
+| 262 | `lower` | `6C 6F 77 65 72` |
+| 32 | 空格 token | `20` |
+| 260 | `牛` | `E7 89 9B` |
+
+因此，ID 序列 `[262, 32, 260]` 不能直接作为 UTF-8 字节 `[262, 32, 260]` 解码；它必须先查词表，变成 token 序列 `[lower, 空格, 牛]`，再转换为字节串。
+
 再拼接所有 token 的底层字节串：
 
 $$ B(I)=\beta(t_1)\Vert\beta(t_2)\Vert\cdots\Vert\beta(t_h). $$
+
+这里还不能对每个 $\beta(t_j)$ 分别执行 UTF-8 解码，因为单个 byte-level token 不一定构成完整 Unicode 字符。例如，ID 259 对应 `E7 89`，只有与后续字节 `9B` 拼接为 `E7 89 9B` 后才能解码为 `牛`。
 
 最后执行一次 UTF-8 解码：
 
