@@ -1,1031 +1,845 @@
-# BPE Tokenizer：从文本表示、压缩算法到语言模型接口
+# Tokenizer 技术谱系：BPE 的历史背景、设计空间与主流方案
 
-## 文档范围
+## 文档定位
 
-本文以 Stanford CS336 Assignment 1 的 byte-level BPE 章节为主线，系统说明 BPE tokenizer 的历史背景、问题来源、算法原理、训练与推理流程、工程实现难点、模型计算影响、评估方法及替代方案。
+本文讨论 tokenizer 的历史背景、系统作用、设计空间，以及当前主流算法与工程生态之间的差异。重点不是再次推导 BPE 的每一轮 merge，而是回答以下问题：
 
-本文是概念教材，不提供可直接提交到作业中的完整实现。原始材料与抽取文本如下：
+1. 为什么语言模型需要 tokenizer；
+2. BPE 在怎样的历史背景下产生；
+3. BPE 实际解决了什么问题，又没有解决什么问题；
+4. BPE、WordPiece、Unigram、SentencePiece 和 tiktoken 分别属于什么概念层级；
+5. 当前常见 tokenizer 家族各自适用于哪些模型与数据；
+6. 词表大小、语言覆盖、序列长度和计算成本之间如何权衡。
 
-- [原始作业 PDF](./cs336_assignment1_basics.pdf)
-- [按页保留排版的 PDF 文本抽取结果](./cs336_assignment1_basics_extracted.md)
+Byte-level BPE 的逐轮训练、merge rank、编码、解码及数学形式化推导已经集中到：
 
-## 1. Tokenizer 在语言模型中的位置
+- [Byte-level BPE 全流程：一个可手工复算的完整例子](./byte_level_bpe_worked_example.md)
 
-语言模型并不直接接收自然语言字符串。神经网络的输入通常是一串整数，每个整数表示词表中的一个离散符号：
+本文不再重复该算例中的操作细节。
 
-$$ \text{text} \xrightarrow{\text{tokenizer.encode}} (t_1,t_2,\ldots,t_n), \qquad t_i \in \{0,1,\ldots,V-1\}. $$
+## 1. Tokenizer 不是普通的文本预处理
 
-其中，$V$ 是词表大小，$n$ 是编码后的序列长度。模型通过 embedding table 将每个 token ID 映射为稠密向量，再执行注意力、前馈网络和输出分类。
+### 1.1 从字符串空间到离散状态空间
 
-生成结束后，tokenizer 执行反向映射：
+语言模型通常接收整数序列，而不是自然语言字符串。Tokenizer 定义映射：
 
-$$ (t_1,t_2,\ldots,t_n) \xrightarrow{\text{tokenizer.decode}} \text{text}. $$
+$$ \operatorname{Encode}:\mathcal{X}\rightarrow\{0,1,\ldots,V-1\}^{*}, $$
 
-因此，tokenizer 不是无关紧要的文本预处理工具，而是模型定义的一部分。它同时决定：
+其中 $\mathcal{X}$ 是可接受的文本空间，$V$ 是词表大小。
 
-1. 模型可以无损表示哪些输入；
-2. 相同文本会占用多少上下文长度；
-3. embedding 与输出层需要多大词表；
-4. 模型学习的是词、词根、字符、字节，还是这些单位的混合；
-5. 不同语言、拼写和领域文本承担怎样的 token 成本；
-6. 训练数据与推理输入之间是否存在表示偏移。
+解码器定义反向映射：
 
-Tokenizer 一旦确定，训练语料、模型 checkpoint 和推理服务都必须使用兼容的词表、special token 定义和切分规则。随意更换 tokenizer 等价于改变模型输入空间。
+$$ \operatorname{Decode}:\{0,1,\ldots,V-1\}^{*}\rightarrow\mathcal{X}. $$
 
-## 2. 为什么不能直接把“单词”作为 token
+对于无损 tokenizer，合法输入应满足：
 
-### 2.1 词表不可能封闭
+$$ \operatorname{Decode}(\operatorname{Encode}(x))=x. $$
 
-词级 tokenizer 将每个完整单词映射到一个 ID。这种方案序列短、语义直观，但无法构造真正封闭的词表。自然语言不断产生新词：
+因此，tokenizer 实际上规定了模型的离散输入空间。模型 embedding、输出 projection、训练数据、推理服务、上下文长度与计费单位都建立在该空间之上。
 
-- 人名、地名和机构名；
-- 产品型号、版本号和日期；
-- 专业术语与化学式；
-- 拼写错误和网络用语；
-- 不同词形、时态、格和复合词；
-- URL、代码、哈希和随机标识符。
+### 1.2 Tokenizer 是模型协议的一部分
 
-若词不在词表中，传统方案只能映射为统一的 `<unk>`。这样会把大量不同字符串压缩成同一个 ID，信息在进入模型之前已经不可逆地丢失。
-
-若通过扩大词表解决覆盖问题，词表又会迅速膨胀。大词表具有三项直接成本：
-
-1. embedding 参数增加；
-2. 输出层参数和 logits 计算增加；
-3. 长尾 token 的训练样本稀少，表示难以充分学习。
-
-在输入 embedding 与输出 projection 不共享权重时，仅这两部分的参数量近似为：
-
-$$ P_{\text{vocab}} \approx 2Vd_{\text{model}}. $$
-
-若共享权重，则近似为 $Vd_{\text{model}}$。因此，词表大小 $V$ 会直接转化为显存、存储和计算成本。
-
-### 2.2 自然语言具有长尾分布
-
-自然语言中的词频通常近似服从 Zipf 分布：少量词极其常见，大量词极其罕见。完整保存所有低频词会浪费词表容量，而完全丢弃低频词又会产生 OOV（out-of-vocabulary）问题。
-
-一个合理的表示方案应当满足：
-
-- 高频片段可以压缩成较大的 token；
-- 低频词仍可拆成更小单位表示；
-- 任意输入都具有回退路径；
-- 词表容量主要分配给训练语料中真正高频、可复用的模式。
-
-BPE 正是在这一目标下形成的一种折中方案。
-
-## 3. 四种基础粒度及其矛盾
-
-![词元粒度之间的系统权衡](./tokenization_granularity_tradeoff.svg)
-
-图 1：词级、子词级、字符级与字节级 tokenization 的主要权衡。粒度越粗，序列通常越短，但词表与 OOV 风险越大；粒度越细，覆盖能力越强，但序列更长。
-
-### 3.1 词级
-
-句子 `the tokenizer works` 可以被切成三个 token。优点是序列短、单位直观；缺点是词表庞大且无法覆盖开放世界中的全部字符串。
-
-### 3.2 Unicode 字符级
-
-字符级方案将字符串拆成 Unicode code point。它能组合出大量单词，但 Unicode 字符集合仍然庞大且稀疏。组合字符、规范化形式和 emoji 序列也使“一个可见字符等于一个 code point”这一假设失效。
-
-### 3.3 字节级
-
-任意 Unicode 字符串都可以编码成 UTF-8 字节。每个字节的取值范围固定为 $0$ 到 $255$，因此基础词表只需 256 项，而且不存在 OOV。
-
-代价是序列显著变长。例如，一个 emoji 往往需要 4 个 UTF-8 字节；中文字符通常需要 3 个 UTF-8 字节。更长的序列会增加模型计算，尤其是 self-attention 的主要计算和显存开销随序列长度近似二次增长：
-
-$$ C_{\text{attention}} = O(n^2 d_{\text{model}}). $$
-
-这里的“4 个 UTF-8 字节”是指：UTF-8 使用 4 个连续的 8-bit 数值来编码一个 Unicode code point，而不是说该 emoji 包含 4 个可见字符。UTF-8 是变长编码，不同 code point 使用的字节数不同：
-
-| Unicode code point 范围 | UTF-8 编码长度 | 首字节形式 |
-|---|---:|---|
-| U+0000–U+007F | 1 字节 | `0xxxxxxx` |
-| U+0080–U+07FF | 2 字节 | `110xxxxx` |
-| U+0800–U+FFFF，排除代理项 U+D800–U+DFFF | 3 字节 | `1110xxxx` |
-| U+10000–U+10FFFF | 4 字节 | `11110xxx` |
-
-例如，emoji `🙂` 对应 Unicode code point U+1F642。其 UTF-8 编码是字节串 `F0 9F 99 82`，也就是十进制序列 `[240, 159, 153, 130]`：
-
-| 层次 | 表示 |
-|---|---|
-| 可见字符 | `🙂` |
-| Unicode code point | U+1F642 |
-| UTF-8 字节 | `F0 9F 99 82` |
-| Byte-level tokenizer 的初始表示 | `F0`、`9F`、`99`、`82` 四个基础 byte token |
-
-因此，“一个 emoji 需要 4 个 UTF-8 字节”描述的是该字符编码后的底层字节长度。对于纯字节 tokenizer，这四个字节始终对应四个 token；对于 byte-level BPE，它们只是在执行 merge 之前的四个基础 token。如果这一字节序列在训练语料中足够常见，BPE 可能将相邻字节逐步合并，使该 emoji 最终由少于四个 token、甚至一个 token 表示。
-
-上述 4 字节结论只适用于由单个 code point 表示的 emoji。部分可见 emoji 实际上是由多个 code point、变体选择符或零宽连接符组成的 grapheme cluster，例如家庭 emoji 和部分职业 emoji；它们的完整 UTF-8 表示可能远大于 4 字节。
-
-### 3.4 子词级
-
-子词 tokenizer 处于词级与字节级之间：
-
-- 以字节或字符作为无损回退单位；
-- 把高频相邻片段合并为较长 token；
-- 常见词可能成为一个 token；
-- 生僻词可由多个较小 token 组合得到。
-
-BPE 是学习这种子词词表的一种确定性方法。
-
-## 4. BPE 的历史来源与 NLP 变体
-
-### 4.1 原始 Byte Pair Encoding
-
-Byte Pair Encoding 最初是一种数据压缩方法。其基本思想是反复寻找数据中最常见的相邻字节对，用一个新的符号替换该字节对。若某个 pair 大量重复，替换后数据长度会缩短。
-
-原始压缩算法关注的是“减少存储长度”，并不关心语言学边界。
-
-### 4.2 子词 BPE
-
-Sennrich、Haddow 和 Birch 在 2016 年将这一思想用于神经机器翻译中的稀有词表示。算法不再以最终压缩文件为目标，而是把每次合并产生的新符号加入子词词表。
-
-这种适配带来两个结果：
-
-1. 高频字符串片段获得独立 token；
-2. 低频词可分解为已知子词，不必全部变成 `<unk>`。
-
-### 4.3 Byte-level BPE
-
-早期 NLP BPE 经常从字符开始。Byte-level BPE 则从 UTF-8 字节开始：
-
-- 初始词表固定包含 256 个字节；
-- 任意 Unicode 文本均可表示；
-- 合并得到的 token 本质上是字节串；
-- 单个 token 不一定能独立解码成合法 Unicode 字符；
-- 多个 token 的字节拼接后才保证恢复原文本。
-
-CS336 Assignment 1 采用的正是 byte-level BPE。
-
-## 5. Unicode、UTF-8 与 byte-level BPE
-
-### 5.1 Unicode code point 不是字节
-
-Unicode 为字符分配 code point，例如 `s` 对应 U+0073。UTF-8 再把 code point 编码成一个或多个字节：
-
-- ASCII 字符通常占 1 字节；
-- 常见欧洲字符通常占 2 字节；
-- 常见中日韩字符通常占 3 字节；
-- 许多 emoji 占 4 字节。
-
-因此，下列三个概念必须区分：
-
-| 概念 | 示例 | 作用 |
-|---|---|---|
-| Unicode 字符 | `牛` | 抽象字符 |
-| Unicode code point | U+725B | 字符的整数编号 |
-| UTF-8 字节 | `E7 89 9B` | 存储和传输表示 |
-
-Byte-level BPE 的基础符号是最后一列的单个字节，而不是 Unicode code point。
-
-### 5.2 为什么通常使用 UTF-8
-
-UTF-8 具有以下优势：
-
-1. ASCII 文本保持单字节表示，与大量现有文本和协议兼容；
-2. 对网页和代码等 ASCII 比例较高的数据通常比 UTF-16、UTF-32 更紧凑；
-3. 没有字节序歧义，不需要依赖 big-endian 或 little-endian 解释；
-4. 互联网上的文本生态主要采用 UTF-8；
-5. 任意 Unicode 字符都能分解为 256 项基础字节词表中的元素。
-
-### 5.3 单个 token 可能不是合法文本
-
-假设某个汉字编码为三个 UTF-8 字节，BPE 可能暂时把它表示为三个 token，也可能把前两个字节合并为一个 token。前两个字节单独解码时是不完整 UTF-8 序列，但它们仍是合法的 tokenizer token。
-
-因此，正确解码顺序是：
-
-1. 根据 token ID 查出每个 token 对应的字节串；
-2. 按顺序拼接所有字节串；
-3. 对完整字节流执行一次 UTF-8 解码。
-
-逐 token 调用 UTF-8 decode 是错误的，因为 Unicode 字符可能跨越 token 边界。
-
-## 6. BPE 试图解决的核心问题
-
-BPE 实际解决的是一个受词表预算约束的序列压缩问题。
-
-给定训练语料和最大词表大小 $V$，需要选择一组可复用字节串，使语料编码后的 token 序列尽量短，同时保留任意输入的表示能力。
-
-它并不直接优化语言模型 loss，也不保证学到语言学意义上的词素。BPE 使用一个局部、贪心代理目标：
-
-> 每轮合并当前最频繁的相邻 token pair。
-
-若 pair $(a,b)$ 在语料当前表示中出现 $f(a,b)$ 次，将其替换为新 token $ab$，理想情况下可以减少约 $f(a,b)$ 个序列位置。高频 pair 因而具有较高的即时压缩收益。
-
-需要注意：
-
-- 这是贪心过程，不保证全局最优词表；
-- 合并结果依赖训练语料；
-- 合并结果依赖 pre-tokenization；
-- 合并结果依赖 tie-break 规则；
-- 相同词表大小不意味着相同 tokenization。
-
-## 7. BPE 训练全流程
-
-![Byte-level BPE 训练与编码流程](./bpe_training_pipeline.svg)
-
-图 2：Byte-level BPE 训练由语料边界、pre-tokenization、UTF-8 字节化、频率合并和产物序列化组成。编码阶段不会重新统计频率，而是重放训练得到的 merge 顺序。
-
-### 7.1 输入与产物
-
-训练输入包括：
-
-- 文本语料；
-- 目标词表大小 $V$；
-- special token 集合；
-- pre-tokenization 规则；
-- pair 频率相同时的确定性 tie-break 规则。
-
-训练输出通常包括：
-
-1. `vocab`：token ID 到字节串的映射；
-2. `merges`：按创建顺序排列的 pair 合并列表；
-3. special token 的固定 ID 与字符串定义；
-4. tokenizer 配置，例如 normalization 和 pre-tokenizer 版本。
-
-仅保存词表通常不够。编码结果还依赖 merge rank，也就是每条 merge 的优先级。
-
-### 7.2 初始化基础词表
-
-Byte-level BPE 从 256 个单字节 token 开始。若有 $S$ 个不与基础 token 重复的 special token，则初始大小为 $256+S$。
-
-目标词表大小为 $V$ 时，需要执行的 merge 数量通常为：
-
-$$ M = V - 256 - S. $$
-
-每执行一次 merge，就产生一个新的字节串 token，并把对应 pair 追加到 merge 列表。
-
-### 7.3 文档与 special token 分段
-
-`<|endoftext|>` 一类 special token 表示文档边界或控制语义。训练时应把它视为硬边界：
-
-- special token 自身作为一个完整词表项保留；
-- 它不参与普通 pair 频率统计；
-- 左右两侧不能发生跨边界合并；
-- 不同文档末尾与开头不能形成伪 pair。
-
-否则，训练可能学到“文档 A 的结尾 + 文档 B 的开头”这种没有稳定语言意义的 token。
-
-### 7.4 Pre-tokenization
-
-Pre-tokenization 是一次粗粒度切分。它通常通过正则表达式把文本分成单词片段、数字、标点和空白片段。
-
-它有两个作用。
-
-第一，限制 merge 的搜索空间。BPE 只在单个 pre-token 内合并，不跨 pre-token 边界。
-
-第二，把完整语料压缩成“pre-token 到出现次数”的频率表。若 `" text"` 出现 10 次，只需保存一次其字节表示和计数 10；统计内部 pair 时，把贡献乘以 10 即可。
-
-设不同 pre-token 的集合为 $\mathcal{P}$，$c(p)$ 为 pre-token $p$ 的出现次数，$\operatorname{occ}_p(a,b)$ 为 pair $(a,b)$ 在 $p$ 当前表示中的相邻出现次数，则全局 pair 频率为：
-
-$$ f(a,b)=\sum_{p\in\mathcal{P}}c(p)\operatorname{occ}_p(a,b). $$
-
-这解释了为什么 `finditer` 式流式匹配比先构造完整 pre-token 列表更节省内存：训练真正需要长期保存的是频率表，而不是每次出现对应的独立字符串对象。
-
-### 7.5 转换为 UTF-8 字节序列
-
-每个 pre-token 被编码为 UTF-8 字节，并初始表示为单字节 token 序列。
-
-例如，ASCII pre-token `text` 的初始表示是：
-
-| 可见字符 | `t` | `e` | `x` | `t` |
-|---|---:|---:|---:|---:|
-| 十进制字节 | 116 | 101 | 120 | 116 |
-| 十六进制字节 | `74` | `65` | `78` | `74` |
-
-对于非 ASCII 文本，一个可见字符会对应多个初始 token。
-
-### 7.6 统计相邻 pair
-
-对每个不同 pre-token 的当前 token 序列，统计所有相邻 pair，并乘以该 pre-token 的语料频率。
-
-假设：
-
-- `text` 出现 10 次；
-- `team` 出现 4 次。
-
-初始 pair 频率包括：
-
-| Pair | 来自 `text` | 来自 `team` | 总计 |
-|---|---:|---:|---:|
-| `(t, e)` | 10 | 4 | 14 |
-| `(e, x)` | 10 | 0 | 10 |
-| `(x, t)` | 10 | 0 | 10 |
-| `(e, a)` | 0 | 4 | 4 |
-| `(a, m)` | 0 | 4 | 4 |
-
-因此，第一轮选择 `(t,e)`，产生新 token `te`。
-
-### 7.7 合并最高频 pair
-
-选中 pair $(a,b)$ 后，所有 pre-token 中相邻的 $a,b$ 被替换成新 token $ab$。
-
-替换必须遵循非重叠原则。例如序列 `a a a` 中 pair `(a,a)` 虽然有两个重叠位置，但一轮替换不能让中间的 `a` 同时参与两次 merge。实际结果取决于约定的扫描方向，训练与编码必须一致。
-
-新 token 被加入词表，pair 被追加到 merges：
-
-| Merge rank | 左 token | 右 token | 新 token |
-|---:|---|---|---|
-| 0 | `t` | `e` | `te` |
-| 1 | `...` | `...` | `...` |
-
-随后重新统计受影响的 pair，并进入下一轮。
-
-### 7.8 确定性 tie-break
-
-多个 pair 可能具有相同最高频率。若 tie-break 不固定，不同进程、Python 版本或数据结构遍历顺序可能生成不同词表。
-
-CS336 作业规定：频率相同时选择字典序更大的 pair。该规则不是所有 BPE 实现的通用标准，而是本作业 tokenizer 格式的一部分。
-
-生产系统也必须明确记录 tie-break，否则无法保证训练可复现。
-
-### 7.9 停止条件
-
-常见停止条件有：
-
-- 词表达到目标大小；
-- 已执行预定 merge 数；
-- 没有可合并 pair；
-- 最高 pair 频率低于阈值；
-- 验证集压缩收益不再明显。
-
-CS336 主要使用固定最大词表大小。
-
-## 8. 一个完整但不依赖代码的训练示例
-
-考虑已经 pre-tokenize 的频率表：
-
-| Pre-token | 频率 |
-|---|---:|
-| `text` | 10 |
-| `team` | 4 |
-
-初始状态是单字节 token：
-
-- `text`：`t | e | x | t`
-- `team`：`t | e | a | m`
-
-### 第一轮
-
-最高频 pair 是 `(t,e)`，频率为 14。合并后：
-
-- `text`：`te | x | t`
-- `team`：`te | a | m`
-
-词表新增 `te`，merges 新增 `(t,e)`。
-
-### 第二轮
-
-当前 pair 为：
-
-- `(te,x)`：10；
-- `(x,t)`：10；
-- `(te,a)`：4；
-- `(a,m)`：4。
-
-最高频率发生并列，因此按 tokenizer 规定的 tie-break 选择其中一个。选择结果会影响后续 merge 路径，这也是 merges 顺序必须作为模型资产保存的原因。
-
-### 关键观察
-
-1. BPE 学到的是语料统计规律，不是预定义词根；
-2. 高频 `te` 被合并，是因为压缩收益高，而不是因为它具有独立语义；
-3. 语料或 tie-break 改变时，merge 顺序可能改变；
-4. 相同最终词表中即使包含相同字节串，merge rank 不同也可能导致不同编码。
-
-## 9. 编码：如何使用已经训练好的 BPE
-
-训练完成后，编码新文本不再统计当前输入中的 pair 频率。编码必须使用训练阶段固定下来的规则。
-
-### 9.1 处理 special token
-
-先识别允许的 special token，并将其作为不可拆分单元。普通文本区域与 special token 区域分开处理。
-
-Special token 的识别存在安全含义。若 API 区分“允许 special token”和“把相同字符串当普通文本”，调用方必须显式指定策略，避免用户输入意外注入控制 token。
-
-### 9.2 执行相同的 pre-tokenization
-
-编码使用的正则、空白处理和 normalization 必须与训练一致。任何差异都会造成分布偏移。
-
-例如，pre-tokenizer 若把前导空格附着到下一个词，则 `hello` 与 ` hello` 可能拥有不同 token。空格不是排版细节，而是词表字节的一部分。
-
-### 9.3 转为 UTF-8 字节
-
-每个普通 pre-token 转成单字节 token 序列。此时任意输入都已经可表示。
-
-### 9.4 按 merge rank 合并
-
-训练产物中的 merge 列表定义一个全序关系。编码时，只有列表中存在的 pair 才能合并，而且优先级由 rank 决定。
-
-重要原则是：
-
-> 编码阶段重放训练得到的 merge 优先级，而不是重新选择当前输入中出现次数最多的 pair。
-
-若重新统计输入频率，同一字符串在不同上下文或 batch 中可能得到不同 tokenization，模型接口将失去确定性。
-
-### 9.5 映射为 token ID
-
-所有合并结束后，每个字节串都在词表中具有唯一 ID，于是得到整数序列。
-
-理想情况下，固定 tokenizer 对相同字符串总是产生相同 token ID 序列。
-
-## 10. 解码与 round-trip
-
-解码步骤是：
-
-1. token ID 查表得到字节串；
-2. 将全部字节串按顺序拼接；
-3. 对完整字节流执行 UTF-8 解码；
-4. 对非法字节序列按约定报错或替换为 U+FFFD。
-
-对所有合法输入文本，若 tokenizer 不执行有损 normalization，应满足：
-
-$$ \operatorname{decode}(\operatorname{encode}(x))=x. $$
-
-需要区分两个事实：
-
-- 任意合法字符串经过 encode 后一定可以 round-trip；
-- 任意人为构造的 token ID 序列不一定对应合法 UTF-8。
-
-后者发生时，可使用 Unicode replacement character `�` 表示无法解码的字节。
-
-## 11. Pre-tokenization 为什么不是可有可无
-
-### 11.1 控制词表统计偏好
-
-如果完全允许跨空白和标点合并，BPE 可能学到大量包含偶然上下文的长 token，例如完整短语、标点变体或跨句片段。这些 token 在训练语料中压缩率高，但泛化和复用价值有限。
-
-Pre-tokenization 通过边界注入先验：
-
-- 字母序列倾向于内部合并；
-- 数字可按特定宽度分组；
-- 标点与单词可以分开；
-- 空白可以单独处理或附着到后续词；
-- contraction 可以按规则拆分。
-
-这不是纯粹的性能优化，而是在定义 tokenizer 的归纳偏置。
-
-### 11.2 为什么常把空格附着到单词
-
-许多 GPT 风格 tokenizer 会产生类似 `" hello"` 的 token，而不是独立的空格 token 加 `"hello"`。原因在于英文单词大多出现在空格之后，把空格与词合并通常能提高压缩率，并区分句首形式与句中形式。
-
-代价是：
-
-- 同一个可见词可能拥有多个 token 版本；
-- 对空白风格敏感；
-- 代码缩进和重复空格可能产生不同分词；
-- 对不使用空格分词的语言帮助有限。
-
-### 11.3 Pre-tokenizer 是模型格式的一部分
-
-仅共享 `vocab.json` 和 `merges.txt` 并不能完全复现 tokenizer。还需要共享：
+一个可复现的 tokenizer 不只包含“词表”。完整定义通常包括：
 
 - Unicode normalization；
-- pre-tokenizer 正则；
-- special token 集合；
-- special token 匹配优先级；
-- 空白与换行规则；
-- UTF-8 错误处理；
-- merge rank 和 tie-break 约定。
+- pre-tokenization 规则；
+- 基础符号集合；
+- 子词学习算法；
+- merge rank 或 token score；
+- token 到 ID 的映射；
+- special token 集合及其优先级；
+- post-processing；
+- padding、truncation 和 chat template 约定；
+- 非法字节与未知输入的回退策略。
 
-## 12. Special token 的语义
+只复制 `vocab.json` 而遗漏 normalization、pre-tokenizer 或 merges，通常无法复现相同的 token ID 序列。
 
-Special token 不仅是罕见字符串，而是控制协议的一部分。常见类型包括：
+### 1.3 Tokenizer 同时影响参数和计算
 
-| 类型 | 作用 |
-|---|---|
-| BOS | 序列开始 |
-| EOS | 序列结束 |
-| PAD | batch 补齐 |
-| UNK | 未知符号，byte-level BPE 通常不需要 |
-| SEP | 片段分隔 |
-| MASK | 掩码语言模型目标 |
-| FIM | fill-in-the-middle 代码生成控制 |
-| Role token | 对话中的 system、user、assistant 边界 |
+设词表大小为 $V$，模型维度为 $d$，token 序列长度为 $n$。
 
-Special token 应满足：
+若输入 embedding 与输出 projection 不共享参数，两部分参数量近似为：
 
-1. 具有稳定 ID；
-2. 编码时不被普通 BPE 拆分；
-3. 训练 pair 不跨过其边界；
-4. 普通用户文本是否允许触发它必须有明确策略；
-5. 模型配置、模板和 tokenizer 配置保持一致。
+$$ P_{\mathrm{vocab}}\approx 2Vd. $$
 
-如果 special token 被误拆，模型看到的控制协议会改变；如果普通文本能意外注入 special token，则可能引发 prompt 边界混淆。
+若二者共享权重，则近似为：
 
-## 13. 词表大小的系统权衡
+$$ P_{\mathrm{vocab}}\approx Vd. $$
 
-BPE 词表大小并非越大越好。
+输出 projection 的主要计算量近似为：
 
-### 13.1 较大词表的收益
+$$ C_{\mathrm{output}}=O(nVd). $$
 
-- 高频词和短语更容易压缩成单 token；
-- 平均序列更短；
-- 固定 context window 可容纳更多原始文本；
-- attention 的二次复杂度可能明显下降。
+Self-attention 的主要计算量近似为：
 
-### 13.2 较大词表的成本
+$$ C_{\mathrm{attention}}=O(n^2d). $$
 
-- embedding 和输出 projection 参数增加；
-- 每个位置计算 logits 的成本增加；
-- 长尾 token 更新次数少；
-- 词表文件和 serving 内存增加；
-- 容易学习语料特有的长字符串、URL 或噪声；
-- 多语言数据不均衡时，词表容量可能被高资源语言占据。
+增大词表 $V$ 往往可以缩短序列 $n$，但会增加 embedding 与输出层成本；减小词表则会产生相反影响。Tokenizer 设计本质上是离散表示与系统成本之间的联合优化。
 
-输出层 dense projection 的主要计算近似为：
+## 2. 开放词表问题
 
-$$ C_{\text{output}}=O(nVd_{\text{model}}). $$
+### 2.1 为什么词级建模不可持续
 
-而 self-attention 近似为 $O(n^2d_{\text{model}})$。增大 $V$ 往往会减小 $n$，因此 tokenizer 选择是在两类成本之间做系统折中。
+早期自然语言处理系统经常把完整单词作为离散单位。该方案直观且序列较短，但自然语言词表并不封闭：
 
-### 13.3 较小词表的收益与成本
+- 人名、地名和机构名持续出现；
+- 产品型号、日期、URL 和哈希几乎没有上限；
+- 拼写错误和网络语言形成大量变体；
+- 形态丰富语言会为同一词根产生大量词形；
+- 代码标识符可任意组合；
+- 多语言系统面对庞大的联合词表。
 
-较小词表减少 embedding 和输出层成本，也让每个 token 获得更多训练样本；但它会增加序列长度、attention 成本和长程依赖学习难度。
+若词不在词表中，传统方案通常映射为 `<unk>`。多个不同字符串因此坍缩为同一个符号，信息在进入模型之前已经不可逆丢失。
 
-不存在脱离模型、语料和硬件的唯一最佳词表大小。
+### 2.2 Zipf 分布与长尾浪费
 
-## 14. Tokenizer 如何影响有效上下文长度
+自然语言词频近似服从 Zipf 分布。少量词非常常见，大量词只出现一次或数次。
 
-模型的 context length 通常以 token 数计，而不是字符数或字节数计。
+完整保留所有低频词会导致：
 
-若上下文上限为 $N$，某数据集的平均压缩率为每 token 包含 $C$ 字节，则可容纳的原始文本规模近似为：
+- 词表和参数规模过大；
+- 长尾 embedding 训练不足；
+- 输出层在大量低频类别上浪费计算；
+- 新词仍然无法覆盖。
 
-$$ B_{\text{context}}\approx N C. $$
+完全丢弃长尾词又会产生严重 OOV。合理方案应当让高频字符串使用较大单位，让低频字符串回退到较小单位。
 
-同一个 8K context 模型：
+### 2.3 从闭集分类转向可组合表示
 
-- 在英语散文上可能容纳较多单词；
-- 在代码、低资源语言或 emoji 密集文本上可能容纳更少语义内容；
-- tokenizer 与目标领域不匹配时，有效上下文会显著缩水。
+子词 tokenization 的核心思想不是“找到语言的真正单词”，而是把开放字符串空间表示为有限符号集合的组合闭包：
 
-这也是 tokenizer 公平性问题的一部分：不同语言完成同一语义任务可能消耗不同 token 数，从而承担不同推理费用和截断风险。
+$$ x=t_1\Vert t_2\Vert\cdots\Vert t_n. $$
 
-## 15. 训练阶段的复杂度与性能瓶颈
+高频字符串可以成为单个 token，低频字符串则由多个较小 token 构成。BPE、WordPiece 和 Unigram 都属于这一思路，但其词表学习目标不同。
 
-### 15.1 朴素算法
+## 3. 粒度选择的基本矛盾
 
-设所有不同 pre-token 当前长度之和为 $L$，需要执行 $M$ 次 merge。若每轮都完整扫描所有 pre-token 并重新统计 pair，时间复杂度近似为：
+![Tokenization 粒度之间的系统权衡](./tokenization_granularity_tradeoff.svg)
 
-$$ O(ML). $$
+图 1：从词级到字节级，基础词表逐渐缩小，覆盖能力增强，但序列通常变长。
 
-当语料和词表较大时，这种实现会非常慢。
+| 粒度 | 基础单位 | 主要优点 | 主要缺点 |
+|---|---|---|---|
+| 词级 | 完整单词 | 序列短，语义直观 | OOV 严重，词表巨大 |
+| 子词级 | 高频字符串片段 | 词表与序列长度较均衡 | 分词依赖语料，边界不等于语义 |
+| 字符级 | Unicode code point 或 grapheme | 对词形和拼写变化稳健 | 序列长，多语言字符集合仍大 |
+| 字节级 | 0–255 的字节值 | 无 OOV，基础词表固定为 256 | 序列最长，模型承担更多组合学习 |
 
-### 15.2 增量更新
+子词 tokenizer 之所以长期占据主流，是因为它在词表大小、序列长度和开放输入覆盖之间提供了工程上可接受的折中。
 
-一次 merge 只会改变与被合并位置相邻的 pair。工程实现可维护：
+## 4. Tokenizer 技术的历史脉络
 
-- pair 到全局频率的映射；
-- pair 到受影响 pre-token 的倒排索引；
-- pre-token 的当前符号序列；
-- 可快速取得最大 pair 的数据结构；
-- 处理旧 heap entry 的版本或惰性失效机制。
+### 4.1 词典与规则分词时代
 
-每轮只更新局部受影响 pair，可以避免全量重计。
+传统 NLP 系统通常依赖：
 
-但是，增量方案的正确性比朴素方案更难保证，常见问题包括：
+- 空白和标点规则；
+- 语言专用分词器；
+- 人工词典；
+- stemming 与 lemmatization；
+- 固定 OOV token。
 
-- 重叠 pair 计数错误；
-- 同一 pre-token 内出现多次目标 pair 时更新不完整；
-- 旧 priority queue 条目未失效；
-- tie-break 不稳定；
-- merge 后倒排索引残留；
-- 频率减法与加法不对称。
+这些方法适合封闭任务，但难以统一处理多语言、噪声文本、代码和开放领域语料。
 
-合理开发顺序是先在极小语料上建立可验证的朴素基线，再通过 profiler 确定瓶颈并优化。
+### 4.2 原始 Byte Pair Encoding
 
-### 15.3 可并行与不可并行部分
+Philip Gage 在 1994 年提出 Byte Pair Encoding，目标是数据压缩。算法反复寻找最常见的相邻 byte pair，并用新符号替换该 pair。
 
-Pre-tokenization 可以按安全文档边界切分，各进程分别统计局部 pre-token 频率，最后按 key 求和。这是典型的 map-reduce。
+原始 BPE 关注存储压缩，不理解单词、词根或语义。它提供的是一种贪心字典构造机制：
 
-全局 BPE merge 具有顺序依赖：
+> 高频局部模式值得分配独立符号。
 
-- 第 $k$ 次 merge 改变第 $k+1$ 次的 pair 频率；
-- 下一轮必须看到上一轮完成后的全局状态；
-- 因而 merge 主循环不容易做粗粒度并行。
+### 4.3 WordPiece
 
-并行化重点通常应放在文件读取、special token 分段、正则匹配和局部频率统计。
+WordPiece 最早用于日语和语音搜索系统，后来因 BERT 系列而广泛传播。
 
-### 15.4 Chunk boundary 正确性
+它与 BPE 都逐步构造子词词表，但通常不直接按原始 pair 频率选择 merge，而是使用更接近语言模型似然或符号关联强度的准则。编码阶段常采用 longest-match-first。
 
-训练时随意按字节偏移切块可能：
+### 4.4 NLP 中的 BPE
 
-- 切断 UTF-8 多字节字符；
-- 切断 pre-token；
-- 改变正则匹配结果；
-- 让局部统计与整文件统计不一致。
+Sennrich、Haddow 和 Birch 在 2016 年把 BPE 用于神经机器翻译中的稀有词问题。完整单词被拆成可复用的子词，翻译模型不再需要把所有低频词映射为 `<unk>`。
 
-CS336 数据使用 `<|endoftext|>` 分隔文档，因此可在 special token 起点切块。由于本来就禁止跨文档合并，该边界同时满足并行与语义正确性。
+这一工作确立了现代子词建模的基本范式：
 
-编码超大文件时也必须保证 chunk 不切断潜在 token。可按完整 pre-token 或明确边界产出 token，尚未确定的尾部需要保留到下一块。
+1. 用有限词表覆盖开放字符串；
+2. 用高频片段压缩序列；
+3. 通过组合处理未见词。
 
-## 16. 编码阶段的复杂度
+### 4.5 Unigram Language Model
 
-最直接的编码方式是对每个 pre-token 依次遍历全部 merges。若 pre-token 长度为 $n$、merge 数为 $M$，最坏情况下会产生较高的 $O(Mn)$ 成本。
+Unigram tokenizer 不从小词表逐步合并，而是从较大的候选词表开始，为 token 分配概率，再反复删除对语料似然贡献较小的候选项。
 
-高性能实现通常会：
+分词被视为隐变量。对字符串 $x$，最优切分为：
 
-- 把 pair 映射到 merge rank；
-- 只考虑当前相邻 pair；
-- 使用优先队列选择 rank 最小的可用 pair；
-- 通过链表或邻接索引执行局部合并；
-- 缓存高频 pre-token 的编码结果；
-- 批量处理输入并减少对象分配。
+$$ z^{*}=\underset{z\in\mathcal{Z}(x)}{\arg\max}\sum_{t\in z}\log p(t). $$
 
-训练和编码是两个不同性能问题：
+这种概率化定义允许同一字符串存在多条合法切分路径，也支持 subword regularization。
 
-- 训练关注全语料 pair 统计和多轮全局更新；
-- 编码关注对大量独立 pre-token 快速重放固定 merge rank。
+### 4.6 SentencePiece
 
-## 17. 如何评价 tokenizer
+SentencePiece 把 normalization、空白表示、子词训练和解码封装成统一系统。它可以使用 BPE，也可以使用 Unigram。
 
-### 17.1 覆盖与可逆性
+因此：
 
-Byte-level BPE 应对任意合法 Unicode 字符串提供无 OOV 编码，并验证 round-trip：
+> SentencePiece 是 tokenizer 框架和模型格式，不是与 BPE 并列的单一分词算法。
 
-$$ \operatorname{decode}(\operatorname{encode}(x))=x. $$
+SentencePiece 直接从原始句子训练，用 `▁` 一类 meta-symbol 显式表示空格，适合没有天然空格边界的语言。
 
-测试集合应覆盖：
+### 4.7 Byte-level BPE
 
-- ASCII；
-- 中文、日文、阿拉伯文等多语言文本；
-- combining mark；
-- emoji 与零宽连接符；
-- NUL 等控制字符；
-- 换行、制表符和重复空格；
-- 非法 token ID 序列的解码策略；
-- special token 与其子串。
+GPT-2 进一步普及了 byte-level BPE。其基础符号不是 Unicode 字符，而是 UTF-8 字节。
 
-### 17.2 压缩率
+这带来两项关键性质：
 
-CS336 使用 bytes/token：
+- 任意输入都可回退到 256 个基础 byte token；
+- 不需要 `<unk>` 才能处理未见 Unicode 字符。
 
-$$ R_{\text{compression}}=\frac{\text{UTF-8 byte count}}{\text{token count}}. $$
+代价是单个 token 可能只是某个 Unicode 字符的部分字节，token 边界与字符边界不再一致。
 
-该值越高，说明每个 token 平均承载的原始字节越多，序列越短。
+### 4.8 当代 tokenizer
 
-压缩率必须分领域和语言报告。只给出单一全局均值可能掩盖低资源语言、代码或噪声文本的明显退化。
+当代 tokenizer 已经从“文本切分器”扩展为模型输入协议。除普通文本外，它还负责表达：
 
-### 17.3 Fertility
+- system、user、assistant 角色；
+- tool call 与 tool result；
+- fill-in-the-middle；
+- 图像、音频和视频占位符；
+- 文档边界；
+- reasoning 或控制模式；
+- padding、BOS、EOS 和 generation boundary。
 
-Fertility 常定义为每个词平均产生多少 token：
+Tokenizer 的 special token 与 chat template 因而具有接口语义，不能只从字符串压缩角度理解。
+
+## 5. BPE 为什么长期流行
+
+### 5.1 确定性与可部署性
+
+固定 pre-tokenizer、词表和 merge rank 后，BPE 编码是确定性的。它不依赖神经网络推理，也不需要复杂动态规划，适合高吞吐数据管线和在线服务。
+
+### 5.2 可控词表预算
+
+每执行一次 merge，词表恰好增加一个 token。因此，目标词表大小可以直接控制。
+
+### 5.3 兼顾覆盖与压缩
+
+若以字符或字节为基础符号，BPE 既保留回退路径，又能把高频片段合并为较长 token。
+
+### 5.4 与语言模型目标弱耦合
+
+Tokenizer 可以在训练语言模型之前独立构建，并复用于不同模型规模。对于需要重复训练大量模型的工程体系，这种解耦具有明显价值。
+
+### 5.5 工程生态成熟
+
+BPE 已经拥有：
+
+- 高性能 Rust、C++ 实现；
+- 成熟的序列化格式；
+- 流式编码和缓存；
+- GPU/CPU 数据管线支持；
+- 大量兼容的预训练模型。
+
+迁移成本和生态惯性进一步强化了其主流地位。
+
+## 6. BPE 没有解决什么
+
+### 6.1 不保证语言学边界
+
+BPE token 是频率驱动的字节串或字符片段，不一定对应词根、词缀、汉字或完整单词。
+
+### 6.2 不保证全局最优
+
+BPE 每轮执行局部贪心选择。早期 merge 会改变后续候选空间，无法保证最终词表在全局意义上具有最优压缩率或最低语言模型 loss。
+
+### 6.3 不直接优化下游模型质量
+
+BPE 通常优化局部频率与序列压缩，而不是验证集 loss、推理延迟或任务准确率。压缩率更高不必然意味着模型效果更好。
+
+### 6.4 不能消除语料偏置
+
+高资源语言和高频领域会获得更多完整 token。低资源语言可能被切得更碎，承担更高 token 成本和更短有效上下文。
+
+### 6.5 对 normalization 与 pre-tokenization 敏感
+
+相同 BPE 算法配合不同 Unicode normalization、数字规则、空格策略或正则表达式，会生成完全不同的词表。
+
+## 7. BPE 的主要变体
+
+| 变体 | 基础单位 | 主要特征 | 主要风险 |
+|---|---|---|---|
+| 字符级 BPE | Unicode 字符 | Token 更接近可见字符 | 字符集合大，仍可能 OOV |
+| Byte-level BPE | UTF-8 字节 | 256 项基础词表，无 OOV | 序列可能更长，token 可跨字符边界 |
+| SentencePiece BPE | 原始 Unicode 与空格 meta-symbol | 不依赖外部词分割 | Normalization 与模型格式绑定 |
+| BPE-Dropout | BPE merge 加随机丢弃 | 产生多种切分，增强鲁棒性 | 训练不再完全确定，调参更复杂 |
+| BPE + byte fallback | 子词为主，字节为回退 | 常见文本紧凑，任意输入可表示 | 罕见字符会突然膨胀为多个 token |
+| Domain-adaptive BPE | 特定领域语料 | 对代码、医学、法律等压缩率高 | 跨领域泛化和兼容性较差 |
+
+完整 merge 算例见 [Byte-level BPE 全流程](./byte_level_bpe_worked_example.md)。
+
+## 8. 需要区分的三个概念层级
+
+Tokenizer 讨论中最常见的混淆，是把算法、实现框架和模型专用资产放在同一层比较。
+
+| 层级 | 回答的问题 | 示例 |
+|---|---|---|
+| 算法家族 | 词表如何学习、字符串如何切分 | BPE、WordPiece、Unigram、WordLevel |
+| 实现框架 | 如何训练、序列化和高性能执行 | SentencePiece、tiktoken、Hugging Face Tokenizers |
+| 模型专用资产 | 某个模型实际采用哪些规则和 ID | `tokenizer.json`、`tokenizer.model`、`tekken.json`、chat template |
+
+### 8.1 SentencePiece 不是 Unigram 的同义词
+
+SentencePiece 同时实现 BPE 和 Unigram。一个模型使用 SentencePiece，并不能推出它一定使用 Unigram。
+
+### 8.2 tiktoken 不是新的统计目标
+
+tiktoken 是面向 BPE 的高性能实现和 encoding 生态。`cl100k_base`、`o200k_base` 等是具体 encoding 资产，不是与 BPE 并列的新算法。
+
+### 8.3 Hugging Face Tokenizers 不是单一 tokenizer
+
+Hugging Face Tokenizers 是 Rust 实现的通用流水线，支持 BPE、WordPiece、Unigram 和 WordLevel，并提供 normalization、pre-tokenization、alignment、padding、truncation 与 post-processing。
+
+### 8.4 模型名称也不是 tokenizer 算法
+
+“BERT tokenizer”“GPT tokenizer”“Mistral tokenizer”通常指特定模型资产与协议。其底层仍需进一步说明是 WordPiece、BPE、Unigram，还是其他方案。
+
+## 9. 当前主流 tokenizer 家族
+
+### 9.1 Byte-level BPE
+
+#### 核心机制
+
+Byte-level BPE 从 UTF-8 字节出发，通过有序 merge 把高频字节串提升为 token。
+
+#### 代表生态
+
+- OpenAI `tiktoken` encodings；
+- Mistral Tekken；
+- 多种现代 decoder-only LLM 的 BPE 词表；
+- Hugging Face ByteLevel + BPE 流水线。
+
+#### 优势
+
+- 任意 Unicode 输入均可表示；
+- 不需要传统 `<unk>`；
+- 编码确定、可逆；
+- 对代码、URL、控制字符和噪声文本具有统一回退路径；
+- 高性能实现成熟；
+- 易于固定词表预算。
+
+#### 劣势
+
+- 罕见语言和复杂 emoji 可能产生较长序列；
+- Token 可能是不完整 UTF-8 片段；
+- 词表受训练语料语言比例显著影响；
+- 固定 merge 只有一种默认切分；
+- 贪心频率目标不等价于下游最优。
+
+#### 适用场景
+
+开放域 decoder-only LLM、多语言与代码混合语料、需要严格无 OOV 和高吞吐推理的系统。
+
+### 9.2 SentencePiece BPE
+
+#### 核心机制
+
+使用 SentencePiece 处理原始 Unicode 文本，以 BPE 学习子词。空格通常映射为可见 meta-symbol，因此可逆性不依赖外部空格规则。
+
+#### 优势
+
+- 不依赖语言专用分词器；
+- 中文、日文等无空格语言可直接训练；
+- 模型文件可封装 normalization、词表和切分信息；
+- 支持 BPE-Dropout；
+- C++ 实现成熟，跨语言绑定丰富。
+
+#### 劣势
+
+- SentencePiece normalization 可能改变原始 code point 序列；
+- 若未启用 byte fallback，字符覆盖配置不当仍可能产生 `<unk>`；
+- 与 JSON-based tokenizer 生态互转时容易遗漏 normalization 或 special token 语义；
+- 具体模型到底使用 BPE 还是 Unigram，需要查看配置，不能只看文件后缀。
+
+#### 适用场景
+
+多语言生成模型、机器翻译、需要从原始句子训练且希望减少外部 pre-tokenization 依赖的系统。
+
+### 9.3 WordPiece
+
+#### 核心机制
+
+WordPiece 构造子词词表，并在编码时通常执行 longest-match-first。连续子词常使用 `##` 一类前缀标记。
+
+#### 代表生态
+
+- BERT；
+- mBERT；
+- DistilBERT；
+- 大量兼容 BERT 接口的 encoder checkpoint。
+
+#### 优势
+
+- 在 encoder 模型生态中成熟稳定；
+- 子词边界与词内 continuation 关系明确；
+- 词表和实现格式简单；
+- 对自然语言分类、检索和序列标注具有大量历史兼容资产。
+
+#### 劣势
+
+- 传统实现依赖词级 pre-tokenization；
+- 单词无法拆分时可能整体变为 `[UNK]`；
+- 对拼写错误、长标识符、URL 和混合代码不如 byte-level 回退稳健；
+- 通常只提供单一确定性切分；
+- 多语言联合词表容易出现语言间容量不均衡。
+
+#### 适用场景
+
+BERT 系 encoder、需要复用成熟 checkpoint 和 `vocab.txt` 生态的任务。
+
+### 9.4 Unigram Language Model
+
+#### 核心机制
+
+Unigram 从较大候选词表出发，为 token 分配概率，通过 EM 与剪枝逐渐缩小词表。编码可通过 Viterbi 寻找最高概率路径，也可采样其他路径。
+
+#### 代表生态
+
+- SentencePiece Unigram；
+- T5、mT5 等 SentencePiece 模型；
+- 机器翻译与多语言预训练体系。
+
+#### 优势
+
+- 具有明确概率模型；
+- 同一字符串可以存在多条合法切分；
+- 支持 subword regularization；
+- 剪枝过程能够撤销不理想候选；
+- 对数据增强和噪声鲁棒性研究更友好。
+
+#### 劣势
+
+- 训练比 BPE 更复杂；
+- 依赖初始候选词表质量；
+- 编码通常需要动态规划；
+- 概率、采样温度和 n-best 配置增加复现复杂度；
+- 若基础字符覆盖或 byte fallback 配置不足，仍可能出现未知 token。
+
+#### 适用场景
+
+机器翻译、多语言模型、希望通过随机子词切分增强泛化的训练体系。
+
+### 9.5 WordLevel
+
+#### 核心机制
+
+直接把 pre-token 映射到固定 ID。
+
+#### 优势
+
+- 编码逻辑简单；
+- 在小型封闭词典中序列最短；
+- Token 语义直观；
+- 可与结构化命令、标签集合或专业术语表对齐。
+
+#### 劣势
+
+- 开放文本 OOV 严重；
+- 词表规模大；
+- 形态变化和拼写噪声导致碎片化或 `<unk>`；
+- 不适合通用生成模型。
+
+#### 适用场景
+
+封闭命令集、有限实体集合、传统检索特征、严格受控领域。
+
+### 9.6 纯字节与 token-free 模型
+
+#### 核心机制
+
+不学习子词词表，直接以 256 个字节值作为模型输入；部分架构在模型内部执行局部下采样或层次化建模。
+
+#### 代表方向
+
+- ByT5；
+- MegaByte；
+- 字节级语言模型；
+- 字符或字节下采样架构。
+
+#### 优势
+
+- 完全消除 tokenizer OOV；
+- 不存在静态子词词表的语言容量分配；
+- 对拼写、噪声和任意字节内容鲁棒；
+- embedding 与输出词表很小；
+- 文本表示规则极其稳定。
+
+#### 劣势
+
+- 序列显著增长；
+- Attention 和激活成本增加；
+- 模型必须自行学习 byte-to-character 和 character-to-word 层次；
+- 固定 token context 可容纳的语义内容减少；
+- 现有 LLM 训练与推理基础设施主要围绕子词优化。
+
+#### 适用场景
+
+研究 tokenizer 偏置、强噪声鲁棒性、超多语言覆盖，以及具备专用层次化架构的模型。
+
+### 9.7 Byte fallback 混合方案
+
+#### 核心机制
+
+常见文本优先使用字符或子词 token；当字符不在主词表中时，回退为对应 UTF-8 字节。
+
+#### 优势
+
+- 常见文本保持较短序列；
+- 任意 Unicode 输入仍可表示；
+- 不要求所有 merge 都直接在原始字节层训练；
+- 易于给现有 SentencePiece 或 Unigram 方案补充开放词表能力。
+
+#### 劣势
+
+- 罕见字符会突然展开为多个 token；
+- 主词表 token 与 byte fallback token 共存，协议更复杂；
+- 不同库的 byte token 命名和序列化格式可能不兼容；
+- 训练语料中未见语言仍可能具有很高 fertility。
+
+#### 适用场景
+
+希望保留字符级或 Unigram 词表，同时要求严格无 OOV 的多语言系统。
+
+## 10. 当前主流工程框架
+
+### 10.1 tiktoken
+
+[tiktoken](https://github.com/openai/tiktoken) 是 OpenAI 开源的高性能 BPE tokenizer。官方仓库提供 `cl100k_base`、`o200k_base` 等 encoding，并支持按模型名称选择 encoding。
+
+#### 工程优势
+
+- Rust 核心实现，吞吐高；
+- Mergeable ranks 与 regex pre-tokenizer 结构清晰；
+- 对 byte-level BPE 支持直接；
+- 可注册自定义 encoding；
+- 适合 token 计数、在线服务和大规模数据预处理。
+
+#### 局限
+
+- 主要围绕 BPE，不是多算法研究框架；
+- Encoding 行为高度依赖 regex 和 special token 配置；
+- 自定义 special token 若与已有 encoding 混用，必须严格版本化；
+- 与 SentencePiece 模型并非直接等价。
+
+### 10.2 SentencePiece
+
+[SentencePiece](https://github.com/google/sentencepiece) 是面向神经文本模型的 C++ tokenizer 框架，支持 BPE 与 Unigram，可直接从原始句子训练。
+
+#### 工程优势
+
+- 语言无关；
+- 空白可逆表示；
+- `.model` 文件自包含；
+- 支持 normalization；
+- 支持 subword regularization 与 BPE-Dropout；
+- 多语言和机器翻译生态成熟。
+
+#### 局限
+
+- 模型内部 normalization 容易被忽视；
+- 将 `.model` 转换为其他格式时可能产生行为差异；
+- Special token 与 chat template 通常还需要模型侧额外配置；
+- “使用 SentencePiece”不足以说明具体算法。
+
+### 10.3 Hugging Face Tokenizers
+
+[Hugging Face Tokenizers](https://huggingface.co/docs/tokenizers/index) 是 Rust 实现的通用 tokenizer 流水线，也是 Transformers 中大量 fast tokenizer 的底层。
+
+官方模型 API同时支持：
+
+- BPE；
+- WordPiece；
+- Unigram；
+- WordLevel；
+- byte fallback；
+- BPE dropout；
+- token 与原文 offset alignment。
+
+#### 工程优势
+
+- 多算法统一接口；
+- 训练和编码速度高；
+- normalization、pre-tokenization、model、post-processing 分层明确；
+- 支持 offset mapping；
+- 与 Hugging Face Hub 和 Transformers 集成紧密。
+
+#### 局限
+
+- 配置自由度高，也意味着两个名称相同的 tokenizer 可能行为不同；
+- `tokenizer.json`、Python wrapper、chat template 和模型配置必须协同版本化；
+- Slow tokenizer 与 fast tokenizer 的边界行为需要测试；
+- 跨库转换仍可能在 normalization、added token 和 byte fallback 上出现差异。
+
+### 10.4 Mistral Tekken
+
+Mistral 的官方文档说明，其 tokenizer 体系从 SentencePiece 迁移到基于 tiktoken 的 [Tekken](https://mistralai.github.io/mistral-common/usage/tokenizers/)，并将 tokenizer 配置保存为 `tekken.json`。
+
+Tekken 体现了一个重要趋势：
+
+> 模型 tokenizer 不再只是基础 BPE，而是 raw tokenizer、instruction protocol、tool call、FIM 和多模态 special token 的组合系统。
+
+#### 工程优势
+
+- 基于 tiktoken 的高性能实现；
+- 针对多语言效率设计；
+- Tokenizer 版本与模型请求协议绑定；
+- 支持聊天、工具调用和图像控制 token。
+
+#### 局限
+
+- 模型专用协议更强，跨模型复用更困难；
+- Special token 不能简单当普通字符串 encode；
+- `tekken.json` 与通用 SentencePiece 格式不兼容；
+- Serving 系统需要显式支持 Mistral 的 instruction tokenizer 层。
+
+## 11. 主流方案横向比较
+
+| 方案 | 词表学习原则 | 编码策略 | OOV | 多种切分 | 典型优势 | 典型劣势 |
+|---|---|---|---|---|---|---|
+| Byte-level BPE | 最高频 byte pair 贪心合并 | 固定 merge rank | 无 | 默认无 | 通用、可逆、高吞吐 | 语料偏置、罕见文本较碎 |
+| 字符级 BPE | 最高频字符 pair 合并 | 固定 merge rank | 取决于字符覆盖 | 默认无 | Token 更接近字符 | Unicode 词表大，仍需 fallback |
+| WordPiece | 似然或关联准则构词表 | Longest-match-first | 常有 `[UNK]` | 无 | BERT 生态成熟 | 噪声和开放输入较脆弱 |
+| Unigram | 概率模型与迭代剪枝 | Viterbi 或采样 | 取决于 fallback | 有 | 概率化、支持正则化 | 训练和编码更复杂 |
+| SentencePiece BPE | BPE + 原始文本框架 | 固定 merge | 取决于字符覆盖/fallback | 可用 BPE-Dropout | 语言无关、自包含 | Normalization 与格式迁移复杂 |
+| WordLevel | 固定词典 | 精确查表 | 高 | 无 | 简单、序列短 | 不适合开放世界 |
+| 纯字节 | 无学习词表 | 每字节一个 token | 无 | 无 | 极强覆盖和鲁棒性 | 序列长、模型计算重 |
+| 子词 + byte fallback | 主子词模型 + 字节回退 | 主路径失败时展开字节 | 无 | 取决于主模型 | 平衡常见文本与开放覆盖 | 稀有文本 token 数突增 |
+
+## 12. 选择 tokenizer 时真正需要比较的维度
+
+### 12.1 覆盖能力
+
+需要确认：
+
+- 任意 Unicode 是否可编码；
+- 非法字节如何处理；
+- 是否存在 `<unk>`；
+- 罕见脚本是否退化为逐字节；
+- emoji 与组合字符是否可逆。
+
+### 12.2 压缩率
+
+常用指标为 bytes/token：
+
+$$ R_{\mathrm{compression}}=\frac{\text{UTF-8 byte count}}{\text{token count}}. $$
+
+该值越高，固定 token context 中通常能容纳更多原始文本。但压缩率不应只报告全局均值。
+
+### 12.3 Fertility
+
+对有空格词边界的语言，可以计算：
 
 $$ F=\frac{\text{token count}}{\text{word count}}. $$
 
-它适合空格分词语言，但对中文或代码不够中立。跨语言比较时，bytes/token、characters/token 和 normalized token count 应结合使用。
+Fertility 越高，说明同一单词被切得越碎。跨语言比较时还应同时报告 characters/token 与 bytes/token。
 
-### 17.4 吞吐与内存
+### 12.4 多语言公平性
 
-需要分别测量：
+设同一语义内容在语言 $a$ 与语言 $b$ 中分别需要 $n_a,n_b$ 个 token，可定义相对 token 成本：
 
-- 训练 pre-tokenization 吞吐；
-- merge 训练耗时；
-- encode bytes/s；
-- decode bytes/s；
-- 峰值内存；
-- 多进程加速比；
-- 小文本延迟与大文件吞吐。
+$$ \Gamma_{a,b}=\frac{n_a}{n_b}. $$
 
-### 17.5 下游模型指标
+若 $\Gamma_{a,b}$ 长期显著偏离 1，则两种语言在有效上下文、推理费用和截断概率上承担不同成本。
 
-更高压缩率不必然带来更低语言模型 loss。完整评价还应包含：
+### 12.5 领域适配
 
-- 相同原始数据量下的 validation loss；
-- 相同 token 预算下的 validation loss；
-- 相同计算预算下的模型质量；
-- 长上下文任务表现；
-- 拼写扰动和噪声鲁棒性；
-- 多语言公平性。
+代码、数学、医学和法律文本具有不同高频模式。通用 tokenizer 可能把领域符号切得过碎；领域 tokenizer 又可能降低普通文本兼容性。
 
-## 18. BPE 的典型失败模式
+### 12.6 吞吐与延迟
 
-### 18.1 把 BPE token 当作语言学词素
+训练语料离线编码关注 bytes/s；在线推理还需关注：
 
-BPE merge 只由频率驱动。它可能学到词根和后缀，也可能学到半个词、标点组合、空格前缀或 UTF-8 字节片段。不能把每个 token 都解释成具有独立语义的语言单位。
+- 单请求固定开销；
+- 小字符串延迟；
+- 批量编码效率；
+- streaming 边界；
+- 多线程扩展；
+- 内存与缓存。
 
-### 18.2 训练与编码的 pre-tokenizer 不一致
+### 12.7 协议兼容
 
-即使 vocab 和 merges 相同，正则、normalization 或 special token 规则不同，也会产生不同 token ID。
+需要验证：
 
-### 18.3 编码时重新计算 pair 频率
+- BOS/EOS/PAD ID；
+- chat template；
+- tool call token；
+- FIM token；
+- multimodal placeholder；
+- added token；
+- 模型 embedding size；
+- serving runtime 的 tokenizer 版本。
 
-训练阶段的频率用于学习 merge rank；编码阶段必须使用固定 rank。重新统计会让 tokenization 依赖输入集合。
+## 13. 不同场景下的选择
 
-### 18.4 逐 token UTF-8 解码
+### 13.1 通用 decoder-only LLM
 
-单个 byte-level token 可能只是一个 Unicode 字符的部分字节。必须先拼接全部 token bytes，再统一 decode。
-
-### 18.5 跨 pre-token 或文档边界合并
-
-这会生成偶然上下文 token，破坏训练与编码的一致性，也可能跨越 special token 控制边界。
-
-### 18.6 忽略重叠 pair
-
-像 `aaaa` 这样的序列包含重叠 pair。计数、替换和增量更新必须采用一致的非重叠规则。
-
-### 18.7 Tie-break 不确定
-
-如果依赖 hash map 的遍历顺序，训练结果可能不可复现，参考测试也会失败。
-
-### 18.8 Unicode normalization 不一致
-
-视觉相同的文本可能具有不同 code point 序列。例如某些带重音字符既可表示为预组合字符，也可表示为基本字符加 combining mark。
-
-若执行 NFC/NFKC normalization，压缩和一致性可能改善，但原始文本 round-trip 可能改变；若不 normalization，则视觉等价文本可能产生不同 token。该选择必须显式记录。
-
-### 18.9 词表过度记忆训练数据
-
-过大的词表可能包含长 URL、模板字符串、隐私片段或重复噪声。Tokenizer 训练本身也需要数据治理和隐私检查。
-
-## 19. BPE 的替代方案
-
-### 19.1 词级 tokenizer
-
-**原理**：空白、标点或语言学分词后，每个词对应一个 ID。
-
-**优点**：
-
-- 序列短；
-- token 易解释；
-- 对封闭领域和固定词典可高效。
-
-**缺点**：
-
-- OOV 严重；
-- 词表巨大；
-- 形态丰富语言产生大量词形；
-- 拼写错误和新实体脆弱。
-
-### 19.2 字符级 tokenizer
-
-**原理**：每个 Unicode code point 作为 token。
-
-**优点**：
-
-- 不依赖词边界；
-- 对拼写变化较稳健；
-- 实现概念简单。
-
-**缺点**：
-
-- Unicode 词表仍较大；
-- 序列长；
-- grapheme cluster 可能由多个 code point 构成；
-- 多语言字符频率极不均衡。
-
-### 19.3 纯字节模型
-
-**原理**：不做 BPE merge，始终使用 256 个字节 token。
-
-**优点**：
-
-- 完全无 OOV；
-- tokenizer 极简单；
-- 对噪声、任意文件和多语言统一；
-- 词表相关参数极小。
-
-**缺点**：
-
-- 序列最长；
-- attention 成本高；
-- 模型需要自己学习字节到字符、字符到词的层次结构；
-- 固定 token context 可承载的语义内容较少。
-
-ByT5 等模型探索了这种方向。
-
-### 19.4 WordPiece
-
-**原理**：同样构造子词词表，但候选合并通常依据似然提升或经过归一化的 pair score，而不是直接使用原始 pair 频率。BERT 系列常使用 WordPiece。
-
-**优点**：
-
-- 目标更接近语言模型似然；
-- 高频单符号不会仅凭边际频率垄断所有 merge；
-- 在经典 BERT 生态中成熟。
-
-**缺点**：
-
-- 训练逻辑比频率 BPE 更复杂；
-- 传统版本仍可能依赖 `<unk>`；
-- 不同实现的 score 和边界约定差异较大。
-
-### 19.5 Unigram Language Model
-
-**原理**：先建立较大的候选子词集合，再迭代删除对语料似然贡献较小的 token。一个字符串可能存在多种合法切分，通常选择概率最大的切分。
-
-**优点**：
-
-- 具有明确概率模型；
-- 可保留多种分词路径；
-- 支持 subword regularization，在训练时采样不同切分；
-- 删除式训练有机会修正早期选择。
-
-**缺点**：
-
-- 训练更复杂；
-- 需要维护候选集合和概率估计；
-- 编码常需要动态规划；
-- 结果与 seed vocabulary 构造密切相关。
-
-SentencePiece 常用 Unigram，也支持 BPE。SentencePiece 是 tokenizer 框架，不是单一算法。
-
-### 19.6 Byte fallback
-
-**原理**：主要词表使用字符级或子词级 token；遇到无法表示的字符时，回退到字节 token。
-
-**优点**：
-
-- 常见文本保持较自然的子词；
-- 任意 Unicode 输入仍无 OOV；
-- 不必让全部训练过程都在原始字节层工作。
-
-**缺点**：
-
-- 主词表与 fallback 规则更复杂；
-- 生僻字符可能突然膨胀为多个 token；
-- 不同实现的 fallback 标记兼容性较差。
-
-### 19.7 形态学 tokenizer
-
-**原理**：借助词干、词缀、复合词和语言规则切分。
-
-**优点**：
-
-- token 更接近语言学结构；
-- 对形态丰富语言可能更高效；
-- 可解释性较好。
-
-**缺点**：
-
-- 依赖语言和外部规则；
-- 多语言统一困难；
-- 新词、代码和噪声文本仍需回退；
-- 工程维护成本高。
-
-### 19.8 Tokenization-free 或 learned segmentation
-
-CANINE、Charformer、MegaByte 等方向尝试直接从字符或字节建模，或在模型内部学习下采样与局部分组。
-
-**优点**：
-
-- 减少固定 tokenizer 的语言偏置；
-- 对拼写、噪声和开放字符集更鲁棒；
-- segmentation 可与模型目标联合学习。
-
-**缺点**：
-
-- 序列计算更重；
-- 架构更复杂；
-- 训练与 serving 基础设施不如标准 subword 模型成熟；
-- 很难直接复用以 token 为中心的现有 checkpoint 和数据管线。
-
-## 20. 方案对比
-
-| 方案 | OOV | 词表大小 | 序列长度 | 训练复杂度 | 多语言 | 主要风险 |
-|---|---|---:|---:|---:|---|---|
-| 词级 | 高 | 很大 | 短 | 低 | 较差 | 长尾与 `<unk>` |
-| 字符级 | 较低 | 中到大 | 长 | 低 | 中等 | Unicode 稀疏性 |
-| 纯字节 | 无 | 256 | 最长 | 最低 | 强 | 模型计算增加 |
-| Byte-level BPE | 无 | 中等 | 中等 | 中等 | 强 | 语料偏置、边界规则 |
-| WordPiece | 取决于 fallback | 中等 | 中等 | 中等 | 中等 | 实现差异、`<unk>` |
-| Unigram | 取决于基础符号 | 中等 | 中等 | 较高 | 强 | 候选集与概率训练 |
-| 形态学 | 取决于 fallback | 中等 | 较短 | 高 | 较差 | 语言专用规则 |
-| Tokenization-free | 无或很低 | 很小 | 很长 | 转移到模型 | 强 | 训练与推理成本 |
-
-## 21. 如何选择 tokenizer
-
-### 21.1 通用大语言模型
-
-通常需要：
+优先需求通常是：
 
 - 无 OOV；
-- 多语言覆盖；
-- 代码和结构化文本支持；
-- 可接受的平均序列长度；
-- 成熟高吞吐实现。
+- 多语言和代码统一覆盖；
+- 高吞吐；
+- 可逆；
+- 大规模 serving 生态成熟。
 
-Byte-level BPE、带 byte fallback 的 BPE/Unigram 是常见选择。
+Byte-level BPE 或带 byte fallback 的子词 tokenizer 通常更合适。
 
-### 21.2 单语言封闭领域
+### 13.2 BERT 系 encoder
 
-若词典稳定且领域严格受控，词级或较大子词词表可能提供更短序列。但仍应为实体、编号和拼写错误设计回退机制。
+如果目标是复用 BERT、mBERT 或 DistilBERT checkpoint，WordPiece 是模型定义的一部分，不应为了理论偏好随意更换。
 
-### 21.3 代码模型
+重新训练 tokenizer 会改变 embedding 行语义，原 checkpoint 无法直接兼容。
 
-需要重点评估：
+### 13.3 多语言模型
 
-- 空格与缩进；
-- 换行符；
-- 标识符分解；
-- 数字分组；
-- 常见操作符；
-- 多语言代码与自然语言注释；
-- fill-in-the-middle special token。
+需要重点比较：
 
-代码 tokenizer 的压缩目标与普通散文不同，直接复用自然语言词表可能造成较高 token fertility。
+- 各语言 bytes/token；
+- 平行语料的 token 数比；
+- 低资源语言 byte fallback 比例；
+- 各脚本在词表中的容量；
+- normalization 是否改变语言特有字符。
 
-### 21.4 多语言模型
+Unigram、SentencePiece BPE、byte-level BPE 和 byte fallback 都可用于多语言，但最终公平性主要取决于训练语料、词表预算和字符覆盖配置。
 
-仅看全局压缩率会偏向高资源语言。应分别报告各语言的：
+### 13.4 代码模型
 
-- bytes/token；
-- characters/token；
-- 同义平行文本 token 数；
-- 截断率；
-- 下游质量；
-- 单位请求成本。
+代码 tokenizer 需要单独关注：
 
-训练语料配比和词表预算共同决定不同语言获得多少高频 token。
+- 缩进和换行；
+- 运算符与标点；
+- 长标识符；
+- 数字与十六进制常量；
+- 多语言源码；
+- 自然语言注释；
+- FIM special token。
 
-## 22. 工程验证清单
+Byte-level BPE 通常具有较好开放覆盖，但 regex pre-tokenizer 若错误拆分缩进或操作符，仍会显著降低效率。
 
-### 22.1 训练正确性
+### 13.5 封闭领域系统
 
-- 初始 256 个字节均存在；
-- special token ID 稳定且不参与普通 merge 统计；
-- 不跨 pre-token 和文档边界合并；
-- pair 频率乘以 pre-token 出现次数；
-- 重叠 pair 处理规则一致；
-- tie-break 确定；
-- 每轮只新增一个 token；
-- merge 数与目标词表大小一致；
-- 小语料结果可手算复核；
-- 朴素版与优化版结果逐轮一致。
+命令识别、有限标签或固定结构协议可以使用 WordLevel 或人工词表。此时开放文本能力并非首要目标，短序列和可解释 ID 可能更重要。
 
-### 22.2 编码正确性
+### 13.6 噪声与安全敏感输入
 
-- 训练和编码使用相同 pre-tokenizer；
-- special token 优先于普通文本匹配；
-- 仅应用已学习 merge；
-- merge 优先级由 rank 决定；
-- 同一输入编码确定；
-- streaming 与整段编码结果一致；
-- 不同 chunk 大小不改变结果。
+面对拼写扰动、控制字符、同形异码和恶意 Unicode，需关注：
 
-### 22.3 解码正确性
+- normalization 策略；
+- byte fallback；
+- round-trip；
+- special token 注入；
+- 不可见字符；
+- tokenizer 与模型服务之间的字符串处理差异。
 
-- 先拼接字节再执行 UTF-8 decode；
-- 合法文本满足 round-trip；
-- 非法 token ID 有明确错误；
-- 非法 UTF-8 有明确 replacement 或 strict 策略；
-- special token 是否原样输出具有明确约定。
+Byte-level 覆盖只能保证“可表示”，不能自动解决 Unicode 安全问题。
 
-### 22.4 性能验证
+## 14. 当代 tokenizer 的发展趋势
 
-- 分离 I/O、regex、pair 统计、merge 更新和序列化耗时；
-- 报告 bytes/s，而不只报告总时间；
-- 记录峰值内存；
-- 对小、中、大语料测量扩展趋势；
-- 验证 multiprocessing 的进程通信成本；
-- 优先优化 profiler 证实的瓶颈。
+### 14.1 词表规模增大
 
-## 23. 最重要的概念辨析
+许多现代 LLM 使用六位数规模词表。较大词表有助于多语言、代码和常见短语压缩，但会增加 embedding、LM head 与训练稀疏性成本。
 
-### BPE “训练”是否训练神经网络
+### 14.2 Byte fallback 成为常见保险
 
-不是。BPE 训练是离散统计过程，产物是词表和 merge 顺序，不包含梯度下降。
+严格无 OOV 已逐渐成为通用模型的基本要求。即使主算法不是 byte-level BPE，也经常加入 byte fallback。
 
-### Token 是否等于单词
+### 14.3 Tokenizer 与训练语料共同设计
 
-不等于。Token 可能是完整单词、词的一部分、前导空格加词、标点串、单个字节或不完整 UTF-8 片段。
+Tokenizer 不再只在随机语料子集上训练。更成熟的流程会控制：
 
-### Byte-level 是否意味着每个 token 都只有一个字节
+- 语言采样比例；
+- 代码比例；
+- 去重；
+- 数字和标点分布；
+- 特殊领域；
+- 隐私和长字符串污染。
 
-不意味着。初始 token 是单字节，BPE merge 后的 token 可以包含任意长度字节串。
+### 14.4 Tokenizer 与对话协议融合
 
-### 词表相同是否意味着编码相同
+Chat、tool use、FIM 和 multimodal 输入需要大量控制 token。Tokenizer 资产因此与模型协议、模板和 serving 实现更紧密地绑定。
 
-不一定。还需要相同的 merge rank、pre-tokenization、normalization 和 special token 规则。
+### 14.5 性能实现专业化
 
-### 压缩率最高是否一定最好
+tiktoken、Hugging Face Tokenizers、SentencePiece 和 Tekken 都把吞吐、缓存、序列化与跨语言绑定视为核心能力。算法相同并不意味着工程性能相同。
 
-不一定。Tokenizer 还影响输出层成本、低频 token 学习、多语言公平性、鲁棒性和下游 loss。
+### 14.6 Token-free 研究持续存在
 
-### BPE 是否保证最优压缩
+ByT5、MegaByte 等工作试图把分词偏置移入模型内部。该方向理论上更统一，但更长序列和更高计算成本使其尚未全面替代子词 tokenizer。
 
-不保证。它是逐轮选择当前最高频 pair 的贪心算法。
+## 15. 一个实用决策框架
 
-## 24. 总结
+### 第一步：确认兼容性约束
 
-BPE tokenizer 的本质可以概括为：
+若已有预训练 checkpoint，通常必须使用原 tokenizer。Tokenizer 不是可独立替换的前端插件。
 
-> 以可完全覆盖输入的细粒度符号为起点，在有限词表预算下，把训练语料中高频、可复用的相邻片段逐步提升为独立 token，从而用适度增大的词表换取更短的模型输入序列。
+### 第二步：确认覆盖目标
 
-Byte-level BPE 进一步用 UTF-8 字节作为基础符号，消除了 OOV，同时保留 BPE 对高频模式的压缩能力。它成功的原因不是完美地恢复了语言学词素，而是在以下矛盾之间取得了实用平衡：
+- 通用开放文本：要求 byte-level 或 byte fallback；
+- 封闭词典：WordLevel 可能足够；
+- 传统 BERT 兼容：WordPiece；
+- 多切分正则化：Unigram；
+- 高吞吐 GPT 风格服务：tiktoken-compatible BPE。
 
-- 开放字符集与有限词表；
-- 短序列与小输出空间；
-- 压缩效率与泛化能力；
-- 语言无关表示与语料统计偏置；
-- 简单确定性算法与高吞吐工程实现。
+### 第三步：确定评估语料
 
-理解 BPE 时，最关键的不是记住“反复合并最高频 pair”这一句话，而是理解 tokenizer 如何把原始文本转换为模型的计算单位，以及每一个边界规则如何改变模型最终看到的数据分布。
+评估集必须覆盖真实输入分布，而不是只使用英语新闻文本。多语言、代码、数字、URL、emoji 和控制字符需要单独统计。
+
+### 第四步：联合比较 $V$ 与 $n$
+
+Tokenizer 选择不能只比较 token 数，也不能只比较词表大小。至少需要同时测量：
+
+- 平均序列长度；
+- 词表大小；
+- embedding/LM head 参数；
+- attention 计算；
+- 编码吞吐；
+- 下游验证 loss。
+
+### 第五步：冻结完整协议
+
+发布 tokenizer 时应共同版本化：
+
+- normalization；
+- pre-tokenizer；
+- vocab；
+- merges 或 token scores；
+- special token；
+- post-processor；
+- chat template；
+- 测试向量。
+
+## 16. 结论
+
+BPE 的历史价值在于把开放词表问题转化为有限符号的可组合表示问题。它以简单、确定、可控的贪心压缩机制，在词级模型与字节级模型之间建立了长期有效的工程折中。
+
+但“当前使用哪种 tokenizer”不能只回答 BPE、WordPiece 或 Unigram。完整答案至少需要包含三个层次：
+
+1. **算法家族**：词表如何学习、切分如何求解；
+2. **实现框架**：normalization、pre-tokenization、序列化和性能如何实现；
+3. **模型协议**：special token、chat template 和多模态边界如何定义。
+
+Byte-level BPE 仍是通用 decoder-only LLM 的重要主流方案；WordPiece 仍广泛存在于 BERT 系 encoder；Unigram 与 SentencePiece 在多语言和机器翻译生态中保持重要地位；byte fallback 与纯字节模型则分别代表工程保险和更彻底的开放输入路线。
+
+不存在脱离语料、模型架构、硬件与应用协议的“最佳 tokenizer”。合理选择应建立在覆盖率、压缩率、语言公平性、吞吐、下游质量与兼容性共同测量之上。
 
 ## 参考资料
 
-1. Stanford CS336, *Assignment 1: Basics*, Section 2, Byte-Pair Encoding Tokenizer.
-2. Philip Gage, “A New Algorithm for Data Compression,” *C Users Journal*, 1994.
-3. Rico Sennrich, Barry Haddow, Alexandra Birch, “Neural Machine Translation of Rare Words with Subword Units,” ACL 2016.
-4. Changhan Wang, Kyunghyun Cho, Jiatao Gu, “Neural Machine Translation with Byte-Level Subwords,” 2019.
-5. Alec Radford et al., *Language Models are Unsupervised Multitask Learners*, 2019.
-6. Taku Kudo, John Richardson, “SentencePiece: A Simple and Language Independent Subword Tokenizer and Detokenizer for Neural Text Processing,” EMNLP 2018.
-7. Taku Kudo, “Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates,” ACL 2018.
-8. Xue et al., “ByT5: Towards a Token-Free Future with Pre-trained Byte-to-Byte Models,” TACL 2022.
+1. Philip Gage, “A New Algorithm for Data Compression,” *C Users Journal*, 1994.
+2. Rico Sennrich, Barry Haddow, Alexandra Birch, “Neural Machine Translation of Rare Words with Subword Units,” ACL 2016.
+3. Mike Schuster, Kaisuke Nakajima, “Japanese and Korean Voice Search,” ICASSP 2012.
+4. Taku Kudo, “Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates,” ACL 2018.
+5. Taku Kudo, John Richardson, “SentencePiece: A Simple and Language Independent Subword Tokenizer and Detokenizer for Neural Text Processing,” EMNLP 2018.
+6. Alec Radford et al., *Language Models are Unsupervised Multitask Learners*, 2019.
+7. Ivan Provilkov, Dmitrii Emelianenko, Elena Voita, “BPE-Dropout: Simple and Effective Subword Regularization,” ACL 2020.
+8. Linting Xue et al., “ByT5: Towards a Token-Free Future with Pre-trained Byte-to-Byte Models,” TACL 2022.
+9. [OpenAI tiktoken](https://github.com/openai/tiktoken).
+10. [SentencePiece](https://github.com/google/sentencepiece).
+11. [Hugging Face Tokenizers](https://huggingface.co/docs/tokenizers/index).
+12. [Hugging Face Tokenizer Models API](https://huggingface.co/docs/tokenizers/api/models).
+13. [Mistral Tokenizers and Tekken](https://mistralai.github.io/mistral-common/usage/tokenizers/).
