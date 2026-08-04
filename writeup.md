@@ -97,7 +97,50 @@ What are some reasons to prefer training our tokenizer on UTF-8 encoded bytes, r
 
 Deliverable: A one-to-two sentence response.
 
-Answer: TODO
+Verification code:
+
+```python
+samples = [
+    "hello!",
+    "hello! こんにちは!",
+    "你好，world!",
+    "🙂",
+]
+encodings = ["utf-8", "utf-16", "utf-32"]
+
+for s in samples:
+    print(f"sample={s!r}, chars={len(s)}")
+    for enc in encodings:
+        b = s.encode(enc)
+        print(f"  {enc}: bytes={len(b)}, prefix={list(b[:24])}")
+    print()
+```
+
+Observed output:
+
+```text
+sample='hello!', chars=6
+  utf-8: bytes=6, prefix=[104, 101, 108, 108, 111, 33]
+  utf-16: bytes=14, prefix=[255, 254, 104, 0, 101, 0, 108, 0, 108, 0, 111, 0, 33, 0]
+  utf-32: bytes=28, prefix=[255, 254, 0, 0, 104, 0, 0, 0, 101, 0, 0, 0, 108, 0, 0, 0, 108, 0, 0, 0, 111, 0, 0, 0]
+
+sample='hello! こんにちは!', chars=13
+  utf-8: bytes=23, prefix=[104, 101, 108, 108, 111, 33, 32, 227, 129, 147, 227, 130, 147, 227, 129, 171, 227, 129, 161, 227, 129, 175, 33]
+  utf-16: bytes=28, prefix=[255, 254, 104, 0, 101, 0, 108, 0, 108, 0, 111, 0, 33, 0, 32, 0, 83, 48, 147, 48, 107, 48, 97, 48]
+  utf-32: bytes=56, prefix=[255, 254, 0, 0, 104, 0, 0, 0, 101, 0, 0, 0, 108, 0, 0, 0, 108, 0, 0, 0, 111, 0, 0, 0]
+
+sample='你好，world!', chars=9
+  utf-8: bytes=15, prefix=[228, 189, 160, 229, 165, 189, 239, 188, 140, 119, 111, 114, 108, 100, 33]
+  utf-16: bytes=20, prefix=[255, 254, 96, 79, 125, 89, 12, 255, 119, 0, 111, 0, 114, 0, 108, 0, 100, 0, 33, 0]
+  utf-32: bytes=40, prefix=[255, 254, 0, 0, 96, 79, 0, 0, 125, 89, 0, 0, 12, 255, 0, 0, 119, 0, 0, 0, 111, 0, 0, 0]
+
+sample='🙂', chars=1
+  utf-8: bytes=4, prefix=[240, 159, 153, 130]
+  utf-16: bytes=6, prefix=[255, 254, 61, 216, 66, 222]
+  utf-32: bytes=8, prefix=[255, 254, 0, 0, 66, 246, 1, 0]
+```
+
+Answer: UTF-8 更适合作为 byte-level tokenizer 的训练编码，因为它对 ASCII 和常见网页混合文本通常更紧凑，例如 `"hello!"` 分别需要 6、14、28 字节；同时 UTF-16/UTF-32 会引入 BOM、大量零字节、端序信息以及 UTF-16 代理对等额外结构，使 BPE 更容易把编码格式的填充模式学进去，而不是学习文本本身的统计规律。
 
 ### (b)
 
@@ -112,7 +155,42 @@ decode_utf8_bytes_to_str_wrong("hello".encode("utf-8"))
 
 Deliverable: An example input byte string for which `decode_utf8_bytes_to_str_wrong` produces incorrect output, with a one-sentence explanation of why the function is incorrect.
 
-Answer: TODO
+Verification code:
+
+```python
+def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
+    return "".join([bytes([b]).decode("utf-8") for b in bytestring])
+
+samples = ["hello", "é", "こんにちは", "🙂"]
+for s in samples:
+    b = s.encode("utf-8")
+    print(f"sample={s!r}, utf8_bytes={list(b)}")
+    print(f"  correct={b.decode('utf-8')!r}")
+    try:
+        wrong = decode_utf8_bytes_to_str_wrong(b)
+        print(f"  wrong={wrong!r}")
+    except UnicodeDecodeError as e:
+        print(f"  wrong_error={type(e).__name__}: {e}")
+```
+
+Observed output:
+
+```text
+sample='hello', utf8_bytes=[104, 101, 108, 108, 111]
+  correct='hello'
+  wrong='hello'
+sample='é', utf8_bytes=[195, 169]
+  correct='é'
+  wrong_error=UnicodeDecodeError: 'utf-8' codec can't decode byte 0xc3 in position 0: unexpected end of data
+sample='こんにちは', utf8_bytes=[227, 129, 147, 227, 130, 147, 227, 129, 171, 227, 129, 161, 227, 129, 175]
+  correct='こんにちは'
+  wrong_error=UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe3 in position 0: unexpected end of data
+sample='🙂', utf8_bytes=[240, 159, 153, 130]
+  correct='🙂'
+  wrong_error=UnicodeDecodeError: 'utf-8' codec can't decode byte 0xf0 in position 0: unexpected end of data
+```
+
+Answer: 反例可以取 `"é".encode("utf-8")`，即字节序列 `[195, 169]`；该函数错误地逐字节调用 `decode("utf-8")`，但 UTF-8 中一个 Unicode 字符可能由多个字节共同表示，所以首字节 `0xc3` 单独解码时会因为缺少后续字节而失败。
 
 ### (c)
 
@@ -120,7 +198,38 @@ Give a two-byte sequence that does not decode to any Unicode character(s).
 
 Deliverable: An example, with a one-sentence explanation.
 
-Answer: TODO
+Verification code:
+
+```python
+samples = [
+    bytes([0x80, 0x80]),
+    bytes([0xC0, 0xAF]),
+    bytes([0xE3, 0x81]),
+    "é".encode("utf-8"),
+]
+
+for b in samples:
+    print(f"bytes={list(b)} hex={b.hex()}")
+    try:
+        print(f"  decoded={b.decode('utf-8')!r}")
+    except UnicodeDecodeError as e:
+        print(f"  error={type(e).__name__}: {e}")
+```
+
+Observed output:
+
+```text
+bytes=[128, 128] hex=8080
+  error=UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+bytes=[192, 175] hex=c0af
+  error=UnicodeDecodeError: 'utf-8' codec can't decode byte 0xc0 in position 0: invalid start byte
+bytes=[227, 129] hex=e381
+  error=UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 0-1: unexpected end of data
+bytes=[195, 169] hex=c3a9
+  decoded='é'
+```
+
+Answer: 一个例子是字节序列 `bytes([0x80, 0x80])`，即十六进制 `8080`；它不能解码为任何 Unicode 字符，因为 UTF-8 中 `0x80` 是 continuation byte，只能跟在合法起始字节之后，不能作为字符的起始字节出现。
 
 ## Problem (train_bpe_tinystories): BPE Training on TinyStories (2 points)
 
