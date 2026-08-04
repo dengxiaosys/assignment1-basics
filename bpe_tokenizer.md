@@ -94,6 +94,28 @@ BPE 正是在这一目标下形成的一种折中方案。
 
 $$ C_{\text{attention}} = O(n^2 d_{\text{model}}). $$
 
+这里的“4 个 UTF-8 字节”是指：UTF-8 使用 4 个连续的 8-bit 数值来编码一个 Unicode code point，而不是说该 emoji 包含 4 个可见字符。UTF-8 是变长编码，不同 code point 使用的字节数不同：
+
+| Unicode code point 范围 | UTF-8 编码长度 | 首字节形式 |
+|---|---:|---|
+| U+0000–U+007F | 1 字节 | `0xxxxxxx` |
+| U+0080–U+07FF | 2 字节 | `110xxxxx` |
+| U+0800–U+FFFF，排除代理项 U+D800–U+DFFF | 3 字节 | `1110xxxx` |
+| U+10000–U+10FFFF | 4 字节 | `11110xxx` |
+
+例如，emoji `🙂` 对应 Unicode code point U+1F642。其 UTF-8 编码是字节串 `F0 9F 99 82`，也就是十进制序列 `[240, 159, 153, 130]`：
+
+| 层次 | 表示 |
+|---|---|
+| 可见字符 | `🙂` |
+| Unicode code point | U+1F642 |
+| UTF-8 字节 | `F0 9F 99 82` |
+| Byte-level tokenizer 的初始表示 | `F0`、`9F`、`99`、`82` 四个基础 byte token |
+
+因此，“一个 emoji 需要 4 个 UTF-8 字节”描述的是该字符编码后的底层字节长度。对于纯字节 tokenizer，这四个字节始终对应四个 token；对于 byte-level BPE，它们只是在执行 merge 之前的四个基础 token。如果这一字节序列在训练语料中足够常见，BPE 可能将相邻字节逐步合并，使该 emoji 最终由少于四个 token、甚至一个 token 表示。
+
+上述 4 字节结论只适用于由单个 code point 表示的 emoji。部分可见 emoji 实际上是由多个 code point、变体选择符或零宽连接符组成的 grapheme cluster，例如家庭 emoji 和部分职业 emoji；它们的完整 UTF-8 表示可能远大于 4 字节。
+
 ### 3.4 子词级
 
 子词 tokenizer 处于词级与字节级之间：
