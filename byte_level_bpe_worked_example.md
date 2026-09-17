@@ -1036,25 +1036,68 @@ $$ \operatorname{Encode}(x)\ \text{必然存在}. $$
 
 则每轮 $m_k$、最终词表 $\mathcal{V}_K$、merge 列表 $\mathcal{M}^{(K)}$ 和任意输入的编码结果均唯一确定。
 
-### 17.12 朴素复杂度
+### 17.12 三阶段时间复杂度
 
-定义第 $k$ 轮所有不同 pre-token 状态的未加权总长度：
+本节分别刻画训练、编码、解码三个阶段的时间复杂度。约定沿用前文符号，另记 $V=|\mathcal{V}_K|$ 为最终词表大小，$K$ 为实际 merge 数（$V=|\mathcal{V}_0|+K$）。所有分析均以 token 或字节的基本操作为单位。
+
+#### 17.12.1 训练复杂度
+
+训练在“不同 pre-token”上按 $c(p)$ 加权进行，因此规模由不同 pre-token 的状态总长度而非语料原始长度决定。定义第 $k$ 轮所有不同 pre-token 状态的未加权总长度：
 
 $$ \widetilde{L}_k=\sum_{p\in\mathcal{U}}|Z_k(p)|. $$
 
-若每轮都完整扫描所有不同 pre-token 来重新统计 pair，则第 $k$ 轮时间复杂度为：
+**朴素实现。** 若每轮都完整重扫所有不同 pre-token 来重建 pair 频率 $f_k$、再取 $\arg\max$，则单轮代价为 $O(\widetilde{L}_k)$，$K$ 轮合计：
 
-$$ O(\widetilde{L}_k). $$
+$$ O\!\left(\sum_{k=0}^{K-1}\widetilde{L}_k\right)\subseteq O(K\,\widetilde{L}_0). $$
 
-执行 $K$ 轮的总时间复杂度为：
+由于每轮至少合并一个 pair、$\widetilde{L}_k$ 单调不增，这是一个宽松但正确的上界。它表明朴素训练大致与“词表目标 $\times$ 去重后语料规模”成正比。
 
-$$ O\left(\sum_{k=0}^{K-1}\widetilde{L}_k\right)\subseteq O(K\widetilde{L}_0). $$
+**增量实现。** 生产级实现不重扫全语料，而是维护三样结构：全局 pair 频率表 $f$、以频率为键的优先队列（或桶结构）、以及每个 $Z_k(p)$ 的双向链表加“pair 出现位置”反向索引。选中 $m_k$ 后，只在**实际发生替换的局部位置**更新：每次非重叠替换会移除至多 2 个旧相邻 pair、新增至多 2 个新相邻 pair，并对 $f$ 做常数次增减。记第 $k$ 轮被选 pair 的加权替换次数为
 
-编码一个初始长度为 $n_{\mathrm{enc}}$ 的 pre-token 时，若对每条 merge 都完整扫描当前序列，朴素上界为：
+$$ \Delta_k=\sum_{p\in\mathcal{U}}c(p)\,\operatorname{nocc}_{Z_k(p)}(u_k,v_k), $$
 
-$$ O(Kn_{\mathrm{enc}}). $$
+则该轮维护代价为 $O(\Delta_k\log V)$（$\log V$ 来自优先队列调整；用桶或惰性删除可降为均摊 $O(\Delta_k)$）。因 $\sum_k \Delta_k$ 不超过初始加权长度 $L_0$（每次替换使加权总长 $L$ 至少减一，见 17.7），故增量训练总时间约为：
 
-增量 pair 索引、优先队列、邻接链表和 pre-token 编码缓存可以降低实际开销，但不改变上述训练与编码的数学定义。
+$$ O\!\left(L_0+\sum_{k=0}^{K-1}\Delta_k\log V\right)\subseteq O\big((L_0+ K)\log V\big). $$
+
+直观地说，增量法把“每轮重扫”降为“只碰被合并的地方”，这是实际可行的 BPE 训练能扩展到大语料的根本原因。
+
+#### 17.12.2 编码复杂度
+
+编码不重新统计频率，只对每个分段 $g_j$ 按固定 rank 重放 $m_0,\ldots,m_{K-1}$。设该分段初始 byte token 数为 $n_{\mathrm{enc}}=|Y_0(g_j)|$。
+
+**朴素实现。** 若对每条 merge 都完整扫描当前序列一次，则单个分段上界为：
+
+$$ O(K\,n_{\mathrm{enc}}). $$
+
+**优先队列实现。** 更常见的做法是：只在序列内维护“当前可执行的相邻 pair 及其最小 rank”，每次取 rank 最小的 pair 执行合并，再局部更新受影响的至多两个邻接 pair。每次合并使序列长度减一，故至多 $n_{\mathrm{enc}}-1$ 次合并，配合堆得到：
+
+$$ O(n_{\mathrm{enc}}\log n_{\mathrm{enc}}). $$
+
+对整个输入 $x$，把各分段相加。设 $\mathcal{G}(x)$ 的普通分段初始 byte token 总数为 $M_{\mathrm{enc}}=\sum_j |Y_0(g_j)|$，则整串编码为 $O(M_{\mathrm{enc}}\log L_{\max})$，其中 $L_{\max}$ 为最长分段的初始长度；special token 分段为原子状态，贡献 $O(1)$。注意复杂度按“分段”而非整串聚合，正是因为 merge 不跨 pre-token 与 special token 边界（17.11.2），把长文本切成短分段本身就抑制了 $\log$ 因子。
+
+#### 17.12.3 解码复杂度
+
+解码分两步：逐 ID 查逆词表得 token 并拼接底层字节，最后对整条字节串做一次 UTF-8 解码。设待解码 ID 数为 $h$，输出字节串长度为
+
+$$ |B(I)|=\sum_{j=1}^{h}|\beta(t_j)|. $$
+
+每个 $\iota^{-1}(i_j)$ 是一次哈希/数组查表 $O(1)$，写出其 $|\beta(t_j)|$ 个字节的代价与该 token 字节长成正比；UTF-8 解码线性于字节数。因此解码总时间为：
+
+$$ O\!\left(h+\sum_{j=1}^{h}|\beta(t_j)|\right)=O(h+|B(I)|). $$
+
+由于 $h\le |B(I)|$（每个 token 至少 1 字节），可进一步简化为 $O(|B(I)|)$，即**解码与输出字节数成线性**，且与 $K$、$V$ 无关。这与直觉一致：解码只是查表加拼接，不涉及任何搜索或 $\arg\max$。
+
+#### 17.12.4 汇总
+
+| 阶段 | 朴素上界 | 优化实现 | 主导量 |
+|---|---|---|---|
+| 训练 | $O(K\,\widetilde{L}_0)$ | $O\big((L_0+K)\log V\big)$ | 去重语料规模与 merge 数 |
+| 编码（单分段） | $O(K\,n_{\mathrm{enc}})$ | $O(n_{\mathrm{enc}}\log n_{\mathrm{enc}})$ | 分段初始字节长度 |
+| 编码（整串） | $O(K\,M_{\mathrm{enc}})$ | $O(M_{\mathrm{enc}}\log L_{\max})$ | 输入字节总量 |
+| 解码 | $O(h+|B(I)|)$ | $O(|B(I)|)$ | 输出字节总量 |
+
+增量 pair 索引、优先队列、邻接链表和 pre-token 编码缓存只改变上述常数与对数因子，不改变训练与编码的数学定义（17.4–17.10）。三阶段的非对称性是本质的：训练需在全语料上反复选优，编码需按 rank 局部搜索，解码则退化为纯线性查表拼接。
 
 ## 18. 符号表
 
@@ -1116,6 +1159,10 @@ $$ O(Kn_{\mathrm{enc}}). $$
 | $\iota^{-1}$ | 整数到 token 的映射 | Token ID 的逆词表查询 |
 | $L_k$ | 非负整数 | 按 $c(p)$ 加权的第 $k$ 轮语料 token 总长度 |
 | $\widetilde{L}_k$ | 非负整数 | 所有不同 pre-token 状态的未加权总长度 |
+| $V$ | 正整数 | 最终词表大小 $|\mathcal{V}_K|$，等于 $|\mathcal{V}_0|+K$ |
+| $\Delta_k$ | 非负整数 | 第 $k$ 轮被选 pair 的加权非重叠替换总次数 |
+| $M_{\mathrm{enc}}$ | 非负整数 | 输入 $x$ 所有普通分段的初始 byte token 总数 |
+| $L_{\max}$ | 非负整数 | 输入 $x$ 中最长分段的初始 byte token 数 |
 | $K_{\max}$ | 非负整数 | 由目标词表大小允许的最大 merge 数 |
 | $K$ | 非负整数 | 实际执行的 merge 数 |
 | $\operatorname{TrainBPE}$ | 训练输入到三元组的映射 | 输出最终词表、merge 列表和 ID 映射的训练过程 |

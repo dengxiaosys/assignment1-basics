@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">Residual highway and gradient flow: Pre-Norm vs Post-Norm</title>
+  <desc id="desc">Pre-Norm creates an uninterrupted identity residual stream across all layers so gradients reach shallow layers without attenuation, whereas Post-Norm inserts a LayerNorm between every residual merge, multiplying Jacobian factors along the backward path.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#ecfeff"/>
+    </linearGradient>
+    <filter id="shadow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#16a34a"/>
+    </marker>
+    <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ef4444"/>
+    </marker>
+    <style>
+      .title { font: 700 30px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 19px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13.5px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 13px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow2); }
+      .blk { fill: #fef3c7; stroke: #f59e0b; stroke-width: 1.3; }
+      .ln { fill: #dbeafe; stroke: #60a5fa; stroke-width: 1.3; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="640" fill="url(#bg2)"/>
+  <text x="60" y="50" class="title">残差“高速公路”与梯度回传</text>
+  <text x="60" y="78" class="subtitle">绿色为前向恒等残差流，红色虚线为反向梯度。Pre-Norm 的残差流不被打断，梯度近乎无衰减地回到浅层。</text>
+
+  <!-- ===== PRE-NORM highway ===== -->
+  <rect x="55" y="110" width="1090" height="230" rx="16" class="card"/>
+  <rect x="55" y="110" width="1090" height="46" rx="16" fill="#dcfce7"/>
+  <text x="80" y="140" class="head">Pre-Norm：一条贯穿到顶的干净残差流</text>
+
+  <!-- highway line -->
+  <line x1="110" y1="250" x2="1090" y2="250" stroke="#16a34a" stroke-width="6"/>
+  <text x="90" y="230" class="mono">x&#8320;</text>
+  <text x="1050" y="230" class="mono">x&#8319;</text>
+
+  <!-- blocks tapping off the highway -->
+  <g>
+    <!-- layer taps -->
+    <g>
+      <rect x="200" y="270" width="120" height="44" rx="8" class="ln"/>
+      <text x="214" y="297" class="mono">LN→子层</text>
+      <line x1="230" y1="270" x2="230" y2="252" stroke="#94a3b8" stroke-width="2"/>
+      <path d="M300 292 L300 258" stroke="#8b5cf6" stroke-width="2.4" fill="none" marker-end="url(#a2)"/>
+    </g>
+    <g>
+      <rect x="420" y="270" width="120" height="44" rx="8" class="ln"/>
+      <text x="434" y="297" class="mono">LN→子层</text>
+      <line x1="450" y1="270" x2="450" y2="252" stroke="#94a3b8" stroke-width="2"/>
+      <path d="M520 292 L520 258" stroke="#8b5cf6" stroke-width="2.4" fill="none" marker-end="url(#a2)"/>
+    </g>
+    <g>
+      <rect x="640" y="270" width="120" height="44" rx="8" class="ln"/>
+      <text x="654" y="297" class="mono">LN→子层</text>
+      <line x1="670" y1="270" x2="670" y2="252" stroke="#94a3b8" stroke-width="2"/>
+      <path d="M740 292 L740 258" stroke="#8b5cf6" stroke-width="2.4" fill="none" marker-end="url(#a2)"/>
+    </g>
+    <g>
+      <rect x="860" y="270" width="120" height="44" rx="8" class="ln"/>
+      <text x="874" y="297" class="mono">LN→子层</text>
+      <line x1="890" y1="270" x2="890" y2="252" stroke="#94a3b8" stroke-width="2"/>
+      <path d="M960 292 L960 258" stroke="#8b5cf6" stroke-width="2.4" fill="none" marker-end="url(#a2)"/>
+    </g>
+  </g>
+
+  <!-- backward gradient along highway -->
+  <path d="M1080 235 L120 235" stroke="#ef4444" stroke-width="2.2" stroke-dasharray="7 5" fill="none" marker-end="url(#a3)"/>
+  <text x="560" y="226" class="small" fill="#ef4444">反向梯度沿残差流几乎无衰减：∂xₙ/∂xₗ 含常数项 1</text>
+
+  <!-- ===== POST-NORM chain ===== -->
+  <rect x="55" y="360" width="1090" height="250" rx="16" class="card"/>
+  <rect x="55" y="360" width="1090" height="46" rx="16" fill="#fee2e2"/>
+  <text x="80" y="390" class="head">Post-Norm：每次相加后被 LN 打断</text>
+
+  <!-- chain of blocks with LN interposed -->
+  <g>
+    <rect x="95" y="470" width="150" height="50" rx="8" class="blk"/>
+    <text x="120" y="500" class="mono">相加(子层)</text>
+    <rect x="255" y="470" width="80" height="50" rx="8" class="ln"/>
+    <text x="270" y="500" class="mono">LN</text>
+
+    <rect x="365" y="470" width="150" height="50" rx="8" class="blk"/>
+    <text x="390" y="500" class="mono">相加(子层)</text>
+    <rect x="525" y="470" width="80" height="50" rx="8" class="ln"/>
+    <text x="540" y="500" class="mono">LN</text>
+
+    <rect x="635" y="470" width="150" height="50" rx="8" class="blk"/>
+    <text x="660" y="500" class="mono">相加(子层)</text>
+    <rect x="795" y="470" width="80" height="50" rx="8" class="ln"/>
+    <text x="810" y="500" class="mono">LN</text>
+
+    <rect x="905" y="470" width="150" height="50" rx="8" class="blk"/>
+    <text x="930" y="500" class="mono">相加(子层)</text>
+  </g>
+
+  <!-- forward through chain -->
+  <path d="M245 495 L255 495" stroke="#475569" stroke-width="2.2" fill="none"/>
+  <path d="M335 495 L365 495" stroke="#475569" stroke-width="2.2" fill="none"/>
+  <path d="M515 495 L525 495" stroke="#475569" stroke-width="2.2" fill="none"/>
+  <path d="M605 495 L635 495" stroke="#475569" stroke-width="2.2" fill="none"/>
+  <path d="M785 495 L795 495" stroke="#475569" stroke-width="2.2" fill="none"/>
+  <path d="M875 495 L905 495" stroke="#475569" stroke-width="2.2" fill="none"/>
+
+  <!-- backward multiplies LN Jacobians -->
+  <path d="M1040 445 L110 445" stroke="#ef4444" stroke-width="2.2" stroke-dasharray="7 5" fill="none" marker-end="url(#a3)"/>
+  <text x="470" y="437" class="small" fill="#ef4444">反向梯度每层都要乘一个 LN 雅可比，连乘后易爆炸/消失</text>
+
+  <text x="95" y="560" class="body">没有一条不被打断的恒等通路：残差和先被 LN 变换，再进入下一层的相加，</text>
+  <text x="95" y="582" class="body">因此深层 Post-Norm 通常必须配合 learning-rate warmup 才能稳定起步。</text>
+</svg>

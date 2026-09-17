@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">RoPE core idea: rotate each 2D pair by an angle proportional to position</title>
+  <desc id="desc">RoPE splits a vector into 2D pairs and rotates each pair by an angle equal to the token position times a per-pair frequency. Because rotation preserves length and the dot product of two rotated vectors depends only on the difference of their angles, attention becomes relative-position aware.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 29px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 18px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 14px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 14px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow); }
+      .axis { stroke: #94a3b8; stroke-width: 1.5; }
+      .grid { stroke: #e2e8f0; stroke-width: 1; }
+      .vpos0 { stroke: #3b82f6; stroke-width: 3.5; fill: none; }
+      .vpos1 { stroke: #8b5cf6; stroke-width: 3.5; fill: none; }
+      .vpos2 { stroke: #ec4899; stroke-width: 3.5; fill: none; }
+      .arc { fill: none; stroke: #f59e0b; stroke-width: 2.5; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="640" fill="url(#bg)"/>
+  <text x="60" y="48" class="title">RoPE 的核心：把每个二维对按"位置 &#215; 频率"旋转一个角度</text>
+  <text x="60" y="76" class="subtitle">位置越靠后，同一个向量被旋转得越多；旋转不改变长度，且两个旋转向量的点积只依赖角度差（相对位置）。</text>
+
+  <!-- Left: rotation of same vector at positions 0,1,2 -->
+  <rect x="55" y="110" width="560" height="470" rx="16" class="card"/>
+  <rect x="55" y="110" width="560" height="46" rx="16" fill="#dbeafe"/>
+  <text x="80" y="140" class="head">同一向量在不同位置被旋转不同角度</text>
+
+  <!-- axes centered at (335, 380) -->
+  <g>
+    <line class="grid" x1="115" y1="380" x2="555" y2="380"/>
+    <line class="grid" x1="335" y1="180" x2="335" y2="560"/>
+    <line class="axis" x1="115" y1="380" x2="555" y2="380" marker-end="url(#arrow)"/>
+    <line class="axis" x1="335" y1="560" x2="335" y2="180" marker-end="url(#arrow)"/>
+    <text x="540" y="404" class="small">x</text>
+    <text x="345" y="196" class="small">y</text>
+
+    <!-- pos 0: angle 0, pointing right-up -->
+    <line class="vpos0" x1="335" y1="380" x2="495" y2="300" marker-end="url(#arrow)"/>
+    <text x="500" y="298" class="mono" fill="#3b82f6">pos 0（&#952;=0）</text>
+
+    <!-- pos 1: rotated by phi -->
+    <line class="vpos1" x1="335" y1="380" x2="452" y2="230" marker-end="url(#arrow)"/>
+    <text x="440" y="222" class="mono" fill="#8b5cf6">pos 1（+&#966;）</text>
+
+    <!-- pos 2: rotated by 2phi -->
+    <line class="vpos2" x1="335" y1="380" x2="360" y2="205" marker-end="url(#arrow)"/>
+    <text x="300" y="205" class="mono" fill="#ec4899">pos 2（+2&#966;）</text>
+
+    <!-- arc showing angle -->
+    <path class="arc" d="M470 350 A 90 90 0 0 0 448 310"/>
+    <text x="470" y="330" class="small" fill="#f59e0b">每步 +&#966;</text>
+  </g>
+  <text x="80" y="560" class="small">长度不变，只有方向随位置旋转 &#8594; 这是"旋转"位置编码名字的由来</text>
+
+  <!-- Right: math cards -->
+  <rect x="640" y="110" width="505" height="470" rx="16" class="card"/>
+  <rect x="640" y="110" width="505" height="46" rx="16" fill="#dcfce7"/>
+  <text x="664" y="140" class="head">两个关键性质</text>
+
+  <text x="664" y="195" class="body">1. 旋转矩阵作用在一个二维对上：</text>
+  <rect x="664" y="212" width="440" height="86" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="684" y="248" class="mono">[ x' ]   [ cos m&#952;  -sin m&#952; ] [ x ]</text>
+  <text x="684" y="276" class="mono">[ y' ] = [ sin m&#952;   cos m&#952; ] [ y ]</text>
+
+  <text x="664" y="345" class="body">2. 旋转后点积只依赖相对位置 (m&#8722;n)：</text>
+  <rect x="664" y="362" width="440" height="70" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="684" y="404" class="mono">&#10216;R&#8098;q, R&#8345;k&#10217; = &#10216;q, R&#8098;&#8331;&#8345;k&#10217;</text>
+
+  <text x="664" y="478" class="body">于是注意力分数天然编码了"相距多远"，</text>
+  <text x="664" y="502" class="body">而不是"各自在第几个绝对位置"。</text>
+  <text x="664" y="540" class="small">m、n 为两个 token 的位置，&#952; 为该二维对的固定频率。</text>
+</svg>

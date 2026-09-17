@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Post-Norm vs Pre-Norm Transformer block</title>
+  <desc id="desc">Side-by-side data flow of a Post-Norm sublayer and a Pre-Norm sublayer, highlighting that Pre-Norm keeps a clean identity residual path while Post-Norm places normalization on the trunk after the residual merge.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#16a34a"/>
+    </marker>
+    <style>
+      .title { font: 700 30px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 20px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 14px Inter, Arial, sans-serif; fill: #334155; }
+      .mono { font: 500 15px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .small { font: 400 12.5px Inter, Arial, sans-serif; fill: #64748b; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow); }
+      .ln { fill: #dbeafe; stroke: #60a5fa; stroke-width: 1.5; }
+      .sub { fill: #fef3c7; stroke: #f59e0b; stroke-width: 1.5; }
+      .add { fill: #ede9fe; stroke: #8b5cf6; stroke-width: 1.5; }
+      .flow { stroke: #475569; stroke-width: 2.4; fill: none; }
+      .resid { stroke: #16a34a; stroke-width: 2.8; fill: none; }
+      .node { font: 600 15px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="720" fill="url(#bg)"/>
+  <text x="60" y="52" class="title">同一个子层的两种归一化放置方式</text>
+  <text x="60" y="80" class="subtitle">左：Post-Norm（原始 Transformer）在残差相加之后归一化；右：Pre-Norm（现代 LLM）在子层输入处归一化，残差通路保持恒等。</text>
+
+  <!-- ===================== POST-NORM ===================== -->
+  <rect x="55" y="110" width="520" height="580" rx="16" class="card"/>
+  <rect x="55" y="110" width="520" height="52" rx="16" fill="#fee2e2"/>
+  <text x="80" y="145" class="head">Post-Norm　xₗ₊₁ = LN(xₗ + Sublayer(xₗ))</text>
+
+  <!-- output -->
+  <text x="250" y="205" class="node">x&#8343;&#8330;&#8321;（下一层输入）</text>
+  <!-- LN box -->
+  <rect x="235" y="225" width="160" height="52" rx="10" class="ln"/>
+  <text x="286" y="258" class="mono">LayerNorm</text>
+  <!-- add -->
+  <rect x="255" y="330" width="120" height="52" rx="10" class="add"/>
+  <text x="305" y="363" class="mono">&#8853;</text>
+  <text x="392" y="363" class="small">残差相加</text>
+  <!-- sublayer -->
+  <rect x="210" y="440" width="210" height="66" rx="10" class="sub"/>
+  <text x="228" y="480" class="mono">Sublayer</text>
+  <text x="228" y="498" class="small">Attention 或 FFN</text>
+  <!-- input -->
+  <text x="270" y="600" class="node">x&#8343;（本层输入）</text>
+
+  <!-- main flow: input -> sublayer -> add -> LN -> output -->
+  <path class="flow" d="M315 585 L315 510" marker-end="url(#arrow)"/>
+  <path class="flow" d="M315 440 L315 386" marker-end="url(#arrow)"/>
+  <path class="flow" d="M315 330 L315 281" marker-end="url(#arrow)"/>
+  <path class="flow" d="M315 225 L315 215" marker-end="url(#arrow)"/>
+
+  <!-- residual: input -> add (skips sublayer only) -->
+  <path class="resid" d="M315 585 C 150 560, 140 420, 140 356 L 255 356" marker-end="url(#arrowGreen)"/>
+  <text x="70" y="470" class="small" fill="#16a34a">残差跳过</text>
+  <text x="70" y="488" class="small" fill="#16a34a">子层</text>
+
+  <text x="80" y="640" class="body">归一化在主干上（相加之后）。堆叠 L 层时，</text>
+  <text x="80" y="662" class="body">LN 会累乘进梯度，深层训练需要 warmup。</text>
+
+  <!-- ===================== PRE-NORM ===================== -->
+  <rect x="625" y="110" width="520" height="580" rx="16" class="card"/>
+  <rect x="625" y="110" width="520" height="52" rx="16" fill="#dcfce7"/>
+  <text x="650" y="145" class="head">Pre-Norm　xₗ₊₁ = xₗ + Sublayer(LN(xₗ))</text>
+
+  <!-- output -->
+  <text x="820" y="205" class="node">x&#8343;&#8330;&#8321;（下一层输入）</text>
+  <!-- add -->
+  <rect x="825" y="240" width="120" height="52" rx="10" class="add"/>
+  <text x="875" y="273" class="mono">&#8853;</text>
+  <text x="962" y="273" class="small">残差相加</text>
+  <!-- sublayer -->
+  <rect x="780" y="350" width="210" height="66" rx="10" class="sub"/>
+  <text x="798" y="390" class="mono">Sublayer</text>
+  <text x="798" y="408" class="small">Attention 或 FFN</text>
+  <!-- LN box -->
+  <rect x="805" y="465" width="160" height="52" rx="10" class="ln"/>
+  <text x="856" y="498" class="mono">LayerNorm</text>
+  <!-- input -->
+  <text x="840" y="600" class="node">x&#8343;（本层输入）</text>
+
+  <!-- main flow: input -> LN -> sublayer -> add -> output -->
+  <path class="flow" d="M885 585 L885 521" marker-end="url(#arrow)"/>
+  <path class="flow" d="M885 465 L885 420" marker-end="url(#arrow)"/>
+  <path class="flow" d="M885 350 L885 296" marker-end="url(#arrow)"/>
+  <path class="flow" d="M885 240 L885 215" marker-end="url(#arrow)"/>
+
+  <!-- residual: input -> add (skips LN + sublayer): clean identity -->
+  <path class="resid" d="M885 585 C 1090 560, 1100 340, 1100 266 L 945 266" marker-end="url(#arrowGreen)"/>
+  <text x="1108" y="430" class="small" fill="#16a34a">干净的</text>
+  <text x="1108" y="448" class="small" fill="#16a34a">恒等通路</text>
+
+  <text x="650" y="640" class="body">残差通路完全不经过 LN 与子层，是一条恒等</text>
+  <text x="650" y="662" class="body">“高速公路”，梯度可无衰减地直达浅层。</text>
+</svg>

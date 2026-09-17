@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">Where RoPE is applied inside the attention sublayer</title>
+  <desc id="desc">RoPE is applied inside self-attention, after the query and key projections and before the dot-product scores. It rotates Q and K per head, but is not applied to V, and there is no additive position embedding at the model input.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#ecfeff"/>
+    </linearGradient>
+    <filter id="shadow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 29px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 17px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13.5px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 14px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow2); }
+      .proj { fill: #dbeafe; stroke: #60a5fa; stroke-width: 1.4; }
+      .rope { fill: #fde68a; stroke: #f59e0b; stroke-width: 1.6; }
+      .val { fill: #bbf7d0; stroke: #22c55e; stroke-width: 1.4; }
+      .score { fill: #ede9fe; stroke: #8b5cf6; stroke-width: 1.4; }
+      .flow { stroke: #475569; stroke-width: 2.3; fill: none; }
+      .noflow { stroke: #ef4444; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="680" fill="url(#bg2)"/>
+  <text x="60" y="48" class="title">RoPE 的位置：注意力子层内部，只旋转 Q 和 K</text>
+  <text x="60" y="76" class="subtitle">在 QKV 投影之后、算注意力分数之前，对每个头的 Q、K 施加旋转；V 不旋转；输入端也不再加绝对位置向量。</text>
+
+  <!-- input -->
+  <rect x="80" y="300" width="150" height="70" rx="12" class="card"/>
+  <text x="104" y="333" class="mono">token 表示</text>
+  <text x="104" y="355" class="small">无绝对位置向量</text>
+
+  <!-- QKV projections -->
+  <path class="flow" d="M230 320 C 280 320, 290 175, 340 175" marker-end="url(#a2)"/>
+  <path class="flow" d="M230 335 L340 335" marker-end="url(#a2)"/>
+  <path class="flow" d="M230 350 C 280 350, 290 495, 340 495" marker-end="url(#a2)"/>
+
+  <rect x="340" y="145" width="150" height="58" rx="10" class="proj"/>
+  <text x="378" y="180" class="mono">Q = xW_q</text>
+  <rect x="340" y="306" width="150" height="58" rx="10" class="proj"/>
+  <text x="378" y="341" class="mono">K = xW_k</text>
+  <rect x="340" y="466" width="150" height="58" rx="10" class="val"/>
+  <text x="378" y="501" class="mono">V = xW_v</text>
+
+  <!-- RoPE on Q and K -->
+  <path class="flow" d="M490 174 L560 174" marker-end="url(#a2)"/>
+  <path class="flow" d="M490 335 L560 335" marker-end="url(#a2)"/>
+  <rect x="560" y="145" width="180" height="58" rx="10" class="rope"/>
+  <text x="590" y="180" class="mono">RoPE 旋转 Q</text>
+  <rect x="560" y="306" width="180" height="58" rx="10" class="rope"/>
+  <text x="590" y="341" class="mono">RoPE 旋转 K</text>
+
+  <!-- V bypasses RoPE -->
+  <path class="noflow" d="M490 495 L820 495" marker-end="url(#a2)"/>
+  <text x="560" y="485" class="small" fill="#ef4444">V 不经过 RoPE（不旋转）</text>
+
+  <!-- scores -->
+  <path class="flow" d="M740 174 C 800 174, 810 235, 840 250" marker-end="url(#a2)"/>
+  <path class="flow" d="M740 335 C 800 335, 810 275, 840 262" marker-end="url(#a2)"/>
+  <rect x="840" y="228" width="240" height="60" rx="10" class="score"/>
+  <text x="860" y="255" class="mono">分数 = &#10216;R&#8098;Q, R&#8345;K&#10217;/&#8730;d</text>
+  <text x="860" y="277" class="small">天然依赖相对位置 m&#8722;n</text>
+
+  <!-- softmax * V -->
+  <path class="flow" d="M960 288 L960 400" marker-end="url(#a2)"/>
+  <path class="flow" d="M820 495 C 900 495, 940 440, 960 415" marker-end="url(#a2)"/>
+  <rect x="840" y="400" width="240" height="60" rx="10" class="card"/>
+  <text x="860" y="427" class="mono">softmax(分数) &#183; V</text>
+  <text x="860" y="449" class="small">注意力输出</text>
+
+  <!-- notes -->
+  <rect x="80" y="560" width="1000" height="90" rx="14" class="card"/>
+  <text x="104" y="592" class="head">三个要点</text>
+  <text x="104" y="618" class="body">1. RoPE 作用在 Q、K 上，不作用在 V 上；　2. 每个注意力头内部各自旋转；　3. 与传统"输入端加正弦/可学习位置向量"不同，RoPE 不在输入相加。</text>
+  <text x="104" y="640" class="small">因此每一层注意力都会重新施加 RoPE（不是只在输入端加一次）。</text>
+</svg>

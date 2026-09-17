@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">The GLU family by choice of gate activation</title>
+  <desc id="desc">Different GLU variants come from swapping the activation applied on the gate branch: Bilinear uses identity, ReGLU uses ReLU, GEGLU uses GELU, and SwiGLU uses the SiLU/Swish activation, which is the common choice in modern large language models.</desc>
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow3" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <style>
+      .title { font: 700 29px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 19px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13.5px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 14px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow3); }
+      .axis { stroke: #94a3b8; stroke-width: 1.5; }
+      .curve { fill: none; stroke-width: 3; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="560" fill="url(#bg3)"/>
+  <text x="60" y="48" class="title">GLU 家族：只是换了门支路上的激活函数</text>
+  <text x="60" y="76" class="subtitle">同一个门控结构 (xW) &#8857; f(xV)，换 f 就得到不同变体；SwiGLU（f = SiLU）是当代 LLM 的常见选择。</text>
+
+  <!-- four cards -->
+  <!-- Bilinear -->
+  <rect x="55" y="110" width="255" height="410" rx="14" class="card"/>
+  <rect x="55" y="110" width="255" height="50" rx="14" fill="#e2e8f0"/>
+  <text x="80" y="143" class="head">Bilinear</text>
+  <text x="80" y="185" class="small">门激活 f = 恒等</text>
+  <g transform="translate(80,210)">
+    <line class="axis" x1="0" y1="90" x2="180" y2="90"/>
+    <line class="axis" x1="90" y1="10" x2="90" y2="170"/>
+    <path class="curve" stroke="#64748b" d="M10 165 L170 15"/>
+  </g>
+  <text x="80" y="430" class="mono">f(z) = z</text>
+  <text x="80" y="460" class="small">无非线性，最简单</text>
+  <text x="80" y="482" class="small">实践较少单独使用</text>
+
+  <!-- ReGLU -->
+  <rect x="325" y="110" width="255" height="410" rx="14" class="card"/>
+  <rect x="325" y="110" width="255" height="50" rx="14" fill="#dbeafe"/>
+  <text x="350" y="143" class="head">ReGLU</text>
+  <text x="350" y="185" class="small">门激活 f = ReLU</text>
+  <g transform="translate(350,210)">
+    <line class="axis" x1="0" y1="90" x2="180" y2="90"/>
+    <line class="axis" x1="90" y1="10" x2="90" y2="170"/>
+    <path class="curve" stroke="#3b82f6" d="M10 90 L90 90 L170 20"/>
+  </g>
+  <text x="350" y="430" class="mono">f(z) = max(0, z)</text>
+  <text x="350" y="460" class="small">负半轴完全关闭</text>
+  <text x="350" y="482" class="small">硬门控，梯度不平滑</text>
+
+  <!-- GEGLU -->
+  <rect x="595" y="110" width="255" height="410" rx="14" class="card"/>
+  <rect x="595" y="110" width="255" height="50" rx="14" fill="#fef3c7"/>
+  <text x="620" y="143" class="head">GEGLU</text>
+  <text x="620" y="185" class="small">门激活 f = GELU</text>
+  <g transform="translate(620,210)">
+    <line class="axis" x1="0" y1="90" x2="180" y2="90"/>
+    <line class="axis" x1="90" y1="10" x2="90" y2="170"/>
+    <path class="curve" stroke="#f59e0b" d="M10 92 C 60 96, 82 92, 90 86 C 110 70, 140 40, 170 18"/>
+  </g>
+  <text x="620" y="430" class="mono">f(z) = z&#183;&#934;(z)</text>
+  <text x="620" y="460" class="small">平滑，含轻微负值</text>
+  <text x="620" y="482" class="small">T5 v1.1 等采用</text>
+
+  <!-- SwiGLU -->
+  <rect x="865" y="110" width="280" height="410" rx="14" class="card"/>
+  <rect x="865" y="110" width="280" height="50" rx="14" fill="#dcfce7"/>
+  <text x="890" y="143" class="head">SwiGLU &#9733;</text>
+  <text x="890" y="185" class="small">门激活 f = SiLU / Swish</text>
+  <g transform="translate(900,210)">
+    <line class="axis" x1="0" y1="90" x2="180" y2="90"/>
+    <line class="axis" x1="90" y1="10" x2="90" y2="170"/>
+    <path class="curve" stroke="#16a34a" d="M10 100 C 55 108, 80 98, 90 88 C 112 66, 140 40, 170 16"/>
+  </g>
+  <text x="890" y="430" class="mono">f(z) = z&#183;&#963;(z)</text>
+  <text x="890" y="460" class="small">平滑、有下界、非单调</text>
+  <text x="890" y="482" class="small">LLaMA/PaLM 等主流选择</text>
+</svg>
