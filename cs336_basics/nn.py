@@ -28,3 +28,28 @@ class Linear(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         # 对最后一维做 x @ W^T，保留任意前置批量维。
         return x @ self.weight.transpose(-2, -1)
+
+
+class Embedding(nn.Module):
+    """查表式词嵌入，遵循 nn.Embedding 接口（无 padding_idx 等附加特性）。
+
+    weight 形状为 (num_embeddings, embedding_dim)：第 i 行是 id=i 的向量。
+    forward 用整型 token_ids 按行索引，输出形状为 token_ids.shape + (embedding_dim,)。
+    
+    uv run pytest -k test_embedding
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, device=None, dtype=None):
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, device=device, dtype=dtype))
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # 词向量常用标准正态初始化（截断在 ±3）。
+        nn.init.trunc_normal_(self.weight, mean=0.0, std=1.0, a=-3.0, b=3.0)
+
+    def forward(self, token_ids: Tensor) -> Tensor:
+        # 按行查表：等价于 self.weight[token_ids]，保留 token_ids 的任意形状。
+        return self.weight[token_ids]
