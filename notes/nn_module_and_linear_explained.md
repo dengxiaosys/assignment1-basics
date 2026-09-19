@@ -79,6 +79,74 @@ model.load_state_dict(sd) # 加载权重
 
 这就是"继承 `nn.Module`"真正的价值：**用登记换服务**。
 
+### 2.5 `nn.Module` 常用接口速查
+
+按用途分组，常用的接口如下（大多**由基类提供、直接用**，无需自己写）：
+
+**A. 你通常要重写的**
+
+| 接口 | 作用 | 备注 |
+|---|---|---|
+| `__init__(self, ...)` | 创建并登记参数/子模块 | 第一行必须 `super().__init__()` |
+| `forward(self, x)` | 定义前向计算 | **别直接调**，用 `module(x)` 触发 |
+
+**B. 登记零件（在 `__init__` 里用）**
+
+| 接口 | 作用 |
+|---|---|
+| `nn.Parameter(tensor)` | 声明可学习参数（赋给 `self.xxx` 即登记） |
+| `self.register_buffer(name, tensor)` | 登记随模型走但不训练的张量（如 RoPE 频率、BN 均值） |
+| `self.register_parameter(name, param)` | 显式登记参数（等价于属性赋值，用于动态命名） |
+| `self.add_module(name, module)` | 显式登记子模块（等价于属性赋值） |
+
+**C. 遍历 / 查看（读取整棵树）**
+
+| 接口 | 返回 |
+|---|---|
+| `parameters()` / `named_parameters()` | 递归所有可学习参数（后者带名字） |
+| `buffers()` / `named_buffers()` | 递归所有 buffer |
+| `children()` / `named_children()` | 直接子模块（不递归） |
+| `modules()` / `named_modules()` | 递归所有子模块（含自己） |
+
+**D. 权重存取**
+
+| 接口 | 作用 |
+|---|---|
+| `state_dict()` | 导出权重+buffer 的有序字典 |
+| `load_state_dict(sd, strict=True)` | 加载权重；`strict` 校验键名/形状 |
+
+**E. 设备 / 精度 / 模式**
+
+| 接口 | 作用 |
+|---|---|
+| `to(device/dtype)`、`cuda()`、`cpu()`、`half()`、`float()` | 整棵树搬设备/改精度 |
+| `train()` / `eval()` | 切训练/推理模式（影响 Dropout、BatchNorm） |
+| `requires_grad_(flag)` | 批量开关整棵树参数的梯度（如冻结） |
+| `zero_grad()` | 清空所有参数的 `.grad` |
+| `apply(fn)` | 对每个子模块递归施加 `fn`（常用于自定义初始化） |
+
+### 2.6 继承时通常需要重写哪些
+
+**绝大多数情况只重写两个**：
+
+1. **`__init__`**：`super().__init__()` 之后，创建并登记参数（`nn.Parameter`）、子模块、buffer；
+2. **`forward`**：写清"输入 → 输出"的计算。
+
+这也正是本仓库 `Linear`、`Embedding` 做的——它们只写了这两个（`Linear` 另外拆了个 `reset_parameters` 作初始化辅助，但那不是必须重写的接口）。
+
+**偶尔按需重写的**：
+
+- **`reset_parameters(self)`**：不是 `nn.Module` 的强制接口，而是社区惯例——把初始化逻辑单独放这里，方便复用（PyTorch 内置层也这么组织）；
+- **`extra_repr(self)`**：自定义 `print(module)` 的显示（如显示 `d_in, d_out`），纯为可读性；
+- **`train(self, mode=True)`**：极少数需要自定义"模式切换副作用"时才重写，通常不碰。
+
+**几乎永远不要重写的**：
+
+- **`__call__`**：它负责在调用 `forward` 前后跑 hooks 等机制；重写它会破坏这些，所以我们只写 `forward`、让基类的 `__call__` 去调它；
+- `parameters()`、`state_dict()`、`to()` 等——这些是基类基于"登记机制"自动实现的，重写只会帮倒忙。
+
+一句话：**继承 `nn.Module` 时，通常只重写 `__init__` 和 `forward`；其余接口用基类的即可。**
+
 ---
 
 ## 3. `nn.Linear`：最常用的一层

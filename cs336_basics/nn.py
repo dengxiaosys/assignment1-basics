@@ -53,3 +53,27 @@ class Embedding(nn.Module):
     def forward(self, token_ids: Tensor) -> Tensor:
         # 按行查表：等价于 self.weight[token_ids]，保留 token_ids 的任意形状。
         return self.weight[token_ids]
+
+
+class RMSNorm(nn.Module):
+    """RMSNorm：只做均方根缩放，无均值中心化、无 bias。
+
+    对最后一维 (d_model) 归一化：
+        y_i = g_i * x_i / sqrt(mean(x^2) + eps)
+    其中 g（weight，形状 (d_model,)）是每个 RMSNorm 块独立的逐通道增益。
+    为数值稳定，均方根在 float32 上计算，再转回原 dtype。
+    """
+
+    def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
+
+    def forward(self, x: Tensor) -> Tensor:
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+        # 沿最后一维求均方根，保持维度以便广播。
+        rms = torch.sqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        y = x / rms * self.weight
+        return y.to(in_dtype)
