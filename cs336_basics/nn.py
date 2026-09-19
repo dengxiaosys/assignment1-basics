@@ -77,3 +77,28 @@ class RMSNorm(nn.Module):
         rms = torch.sqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
         y = x / rms * self.weight
         return y.to(in_dtype)
+
+
+def silu(x: Tensor) -> Tensor:
+    """SiLU / Swish: x * sigmoid(x)。逐元素、无参数。"""
+    return x * torch.sigmoid(x)
+
+
+class SwiGLU(nn.Module):
+    """SwiGLU 前馈网络（无 bias）。
+
+    FFN(x) = W2 ( SiLU(W1 x) ⊙ (W3 x) )
+    其中 W1、W3 形状 (d_ff, d_model)（升维），W2 形状 (d_model, d_ff)（降维），
+    ⊙ 为逐元素相乘。W1 为门支路（过 SiLU），W3 为值支路。
+    """
+
+    def __init__(self, d_model: int, d_ff: int, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.w1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.w2(silu(self.w1(x)) * self.w3(x))
