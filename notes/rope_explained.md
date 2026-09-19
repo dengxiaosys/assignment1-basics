@@ -9,7 +9,8 @@
 1. 第 1 节：位置编码到底为什么必要；
 2. 第 2–3 节：RoPE 的核心思想（二维旋转）与它为什么天然编码相对位置；
 3. 第 4 节：回答你最关心的问题——RoPE 在 LLM 中的位置（注意力子层内，只作用于 Q/K）；
-4. 第 5 节起：多频率设计、长上下文扩展、优缺点、与其他位置编码的对比。
+4. 第 5–6 节：多频率设计、长上下文扩展、优缺点；
+5. 第 7 节：把其它位置编码（正弦、可学习绝对、Shaw、T5、ALiBi、NoPE）逐一展开，并与 RoPE 对照。
 
 本讲义与同目录的 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)、[glu_explained.md](./glu_explained.md)、[byte_level_bpe_worked_example.md](./byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。前两篇分别讲"归一化放哪"和"前馈子层怎么算"，本篇讲"位置信息怎么进注意力"，共同构成现代 LLM 层的核心组件。
 
@@ -159,17 +160,92 @@ RoPE 的一个巨大工程红利是**便于外推到训练时没见过的更长�
 
 ---
 
-## 7. 与其他位置编码的对比
+## 7. 其它位置编码详解
 
-| 方法 | 注入方式 | 位置类型 | 位置 | 长度外推 |
-|---|---|---|---|---|
-| 正弦 Sinusoidal | 输入端加向量 | 绝对 | 输入 embedding | 一般 |
-| 可学习绝对 | 输入端加向量 | 绝对 | 输入 embedding | 差（超表长无定义） |
-| 相对位置偏置（如 T5） | 给注意力分数加偏置 | 相对 | 注意力打分处 | 中等 |
-| ALiBi | 给分数加线性距离惩罚 | 相对 | 注意力打分处 | 好 |
-| **RoPE** | **旋转 Q/K** | **相对（由绝对实现）** | **注意力子层内 Q/K** | **好（可插值/NTK/YaRN）** |
+前面第 1 节只是列了名字，这里把每一类展开讲清楚：它**怎么注入位置**、**是绝对还是相对**、**优缺点**，最后再和 RoPE 对照。先给一张全景图：
 
-一个值得记住的对照：**ALiBi 是"给远处打分做减法惩罚"，RoPE 是"给 Q/K 做旋转"**；二者都实现相对位置，但机制不同。RoPE 因兼顾效果、效率与可扩展性，成为当前主流。
+![位置编码全景分类](./images/position_encoding_taxonomy.svg)
+
+一个统一的看问题框架是问两个问题：
+
+1. **编码的是绝对位置还是相对位置？**（"我在第几个" vs "我们相距多远"）
+2. **位置信息注入在哪一步？**（加到输入 embedding / 加到注意力分数 / 旋转 Q,K / 完全不加）
+
+下面逐一展开。
+
+### 7.1 正弦位置编码（Sinusoidal，绝对）
+
+**做法**：对位置 $pos$ 和维度下标 $i$，用一组不同波长的正弦、余弦生成固定向量，加到输入 embedding 上：
+
+$$ \mathrm{PE}(pos, 2i) = \sin\!\big(pos / 10000^{2i/d}\big), \quad \mathrm{PE}(pos, 2i+1) = \cos\!\big(pos / 10000^{2i/d}\big) $$
+
+低维用短波长（变化快），高维用长波长（变化慢），于是每个位置得到一个独一无二的"多频率指纹"。
+
+![正弦多波长与 ALiBi 线性偏置的直觉](./images/sinusoidal_alibi_intuition.svg)
+
+**特点**：无需学习参数、可外推到更长位置；相邻位置编码相似，利于泛化。**局限**：它是绝对编码，模型要"间接"从两个绝对向量推断相对关系；实践中长程外推质量一般。
+
+> 有趣的呼应：正弦编码"用多种波长覆盖多尺度"的思想，和 RoPE 的多频率（第 5 节）是同一种智慧——只不过正弦把它做成"加性波形"，RoPE 做成"旋转角速度"。
+
+### 7.2 可学习绝对位置编码（Learned Absolute，绝对）
+
+**做法**：维护一张可学习的位置向量表 $P \in \mathbb{R}^{L \times d}$，第 $pos$ 个位置查表得到 $P_{pos}$，加到输入 embedding 上。BERT、GPT-2、原始 ViT 都用它。
+
+**特点**：简单、灵活，让模型自己学位置该长什么样。**局限**：
+
+1. **无法超出训练长度**：位置表只有 $L$ 行，$pos \ge L$ 时没有对应向量，天然不能外推；
+2. 仍是绝对编码，缺乏相对位置的平移不变性；
+3. 占用可学习参数（虽然通常不多）。
+
+### 7.3 Shaw 相对位置编码（Relative，2018）
+
+**做法**：第一个把"相对"显式引入注意力的经典工作。它给每个相对距离 $i-j$ 学习一个相对位置向量，加到 key（有时也加到 value）上，从而让注意力分数依赖相对距离而非绝对位置。通常把距离裁剪到窗口 $[-k, k]$。
+
+**特点**：真正的相对位置，效果好。**局限**：需要为相对距离维护额外张量，**计算和显存成本较高**，在长序列上不划算——这也是后来 T5、ALiBi、RoPE 追求"更便宜的相对编码"的动机。
+
+### 7.4 T5 相对位置偏置（Relative bias，标量）
+
+**做法**：T5 把相对位置简化到极致——不加向量，只**给注意力分数加一个标量偏置**。它按相对距离**分桶**（近处每个距离一个桶，远处对数合并成一个桶），每个桶学习一个标量，直接加到 $q\cdot k$ 上：
+
+$$ \text{score}_{ij} = q_i \cdot k_j + b_{\text{bucket}(i-j)} $$
+
+**特点**：极其便宜（只多一张小的偏置表）、相对、可跨层共享。**局限**：偏置是标量且分桶较粗，表达能力有限；外推到远超训练的距离时，落进"远处大桶"会不够精细。
+
+### 7.5 ALiBi（Attention with Linear Biases，2021）
+
+**做法**：比 T5 更简单——**连学习都不用**。直接给分数减去一个"距离 × 斜率"的线性惩罚，越远扣得越多：
+
+$$ \text{score}_{ij} = q_i \cdot k_j - m \cdot |i - j| $$
+
+其中斜率 $m$ 是每个注意力头固定的超参数（不同头用不同斜率）。见上方右图。
+
+**特点**：**零额外参数、外推能力很强**（因为惩罚是简单的线性外插），实现极简。**局限**：内置了"近处优先"的强归纳偏置，对需要远距离精确定位的任务不一定合适；灵活性不如 RoPE。
+
+### 7.6 NoPE（不加显式位置编码）
+
+**做法**：在 **decoder-only 因果模型**里，干脆**不加任何显式位置编码**。为什么还能工作？因为**因果 mask 本身已经打破了置换对称性**：每个位置只能看到自己和前面的 token，"能看到多少个前文"本身就隐含了位置信息，模型可以隐式学出顺序。
+
+**特点**：近年研究发现 NoPE 在因果 LM 上能与显式编码相竞争，甚至外推不差。**局限**：只适用于因果（单向）注意力；双向 encoder 去掉位置编码会退化为置换不变，不可用。它更多是"理论上的有趣发现"和研究对象，主流生产模型仍用 RoPE。
+
+### 7.7 汇总对照表
+
+| 方法 | 注入方式 | 位置类型 | 注入位置 | 参数 | 长度外推 |
+|---|---|---|---|---|---|
+| 正弦 Sinusoidal | 加到输入 | 绝对 | 输入 embedding | 无 | 一般 |
+| 可学习绝对 | 加到输入 | 绝对 | 输入 embedding | 有（位置表） | 差（超表长无定义） |
+| Shaw 相对 | 加相对向量到 K/V | 相对 | 注意力内部 | 有 | 中等，成本高 |
+| T5 相对偏置 | 给分数加标量 | 相对 | 注意力打分处 | 有（小） | 中等 |
+| ALiBi | 给分数加线性惩罚 | 相对 | 注意力打分处 | 无 | 好 |
+| NoPE | 不注入（靠因果 mask） | 隐式 | —— | 无 | 好（仅因果模型） |
+| **RoPE** | **旋转 Q/K** | **相对（由绝对实现）** | **注意力子层内 Q/K** | 无 | **好（可插值/NTK/YaRN）** |
+
+几个值得记住的对照：
+
+- **绝对 vs 相对**：正弦、可学习绝对是"你在第几位"；Shaw、T5、ALiBi、RoPE 是"我们相距多远"。语言更在意后者。
+- **加性 vs 乘性**：几乎所有旧方法都是"加"（加向量或加偏置到分数）；**RoPE 是唯一主流的"乘性（旋转）"方案**，这让它既有相对性，又保持向量长度与数值稳定。
+- **ALiBi vs RoPE**：**ALiBi 是"给远处打分做减法惩罚"，RoPE 是"给 Q/K 做旋转"**；都实现相对位置，但 ALiBi 自带近处偏好，RoPE 更中性、更灵活、可调频扩展。
+
+RoPE 正是因为兼顾了相对位置、实现高效、数值稳定与长度可扩展，才在这一众方法中成为当前主流。
 
 ---
 
@@ -193,6 +269,8 @@ RoPE 的一个巨大工程红利是**便于外推到训练时没见过的更长�
 2. Vaswani et al., *Attention Is All You Need*, 2017（正弦位置编码）。
 3. Shaw et al., *Self-Attention with Relative Position Representations*, 2018（相对位置编码）。
 4. Press et al., *Train Short, Test Long: Attention with Linear Biases (ALiBi)*, 2021（对照方法）。
-5. Chen et al., *Extending Context Window via Position Interpolation*, 2023（位置插值）。
-6. Peng et al., *YaRN: Efficient Context Window Extension of Large Language Models*, 2023（长上下文扩展）。
-7. Touvron et al., *LLaMA*, 2023（RoPE 的工业实践）。
+5. Raffel et al., *Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer (T5)*, 2020（相对位置偏置）。
+6. Chen et al., *Extending Context Window via Position Interpolation*, 2023（位置插值）。
+7. Peng et al., *YaRN: Efficient Context Window Extension of Large Language Models*, 2023（长上下文扩展）。
+8. Kazemnejad et al., *The Impact of Positional Encoding on Length Generalization in Transformers*, 2023（NoPE 分析）。
+9. Touvron et al., *LLaMA*, 2023（RoPE 的工业实践）。

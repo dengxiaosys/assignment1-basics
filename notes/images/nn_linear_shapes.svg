@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="title desc">
+  <title id="title">nn.Linear computation and shapes</title>
+  <desc id="desc">nn.Linear applies y = x W transpose plus bias. The input has shape batch by in_features, the weight is stored as out_features by in_features, and the output is batch by out_features. The assignment variant drops the bias.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#ecfeff"/>
+    </linearGradient>
+    <filter id="shadow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 29px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 17px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 14px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow2); }
+      .xin { fill: #dbeafe; stroke: #60a5fa; stroke-width: 1.5; }
+      .w { fill: #bbf7d0; stroke: #22c55e; stroke-width: 1.5; }
+      .yout { fill: #fde68a; stroke: #f59e0b; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="620" fill="url(#bg2)"/>
+  <text x="60" y="46" class="title">nn.Linear：一次矩阵乘法（形状是关键）</text>
+  <text x="60" y="74" class="subtitle">y = x · Wᵀ (+ b)。权重按 (out_features, in_features) 存储；作业版去掉偏置 b。</text>
+
+  <!-- shapes flow -->
+  <rect x="70" y="130" width="220" height="150" rx="12" class="xin"/>
+  <text x="92" y="162" class="head">输入 x</text>
+  <text x="92" y="196" class="mono">(..., in_features)</text>
+  <text x="92" y="224" class="small">前面的 ... 是任意批量维</text>
+  <text x="92" y="246" class="small">如 (batch, seq, in)</text>
+
+  <text x="315" y="212" class="mono" fill="#475569">×</text>
+
+  <rect x="360" y="130" width="240" height="150" rx="12" class="w"/>
+  <text x="382" y="162" class="head">权重 Wᵀ</text>
+  <text x="382" y="196" class="mono">W: (out_f, in_f)</text>
+  <text x="382" y="224" class="small">计算时用其转置 (in_f, out_f)</text>
+  <text x="382" y="246" class="small">这是 PyTorch 的存储约定</text>
+
+  <line class="w" x1="610" y1="205" x2="660" y2="205" marker-end="url(#a2)" stroke="#475569" stroke-width="2.4"/>
+
+  <rect x="670" y="130" width="230" height="150" rx="12" class="yout"/>
+  <text x="692" y="162" class="head">输出 y</text>
+  <text x="692" y="196" class="mono">(..., out_features)</text>
+  <text x="692" y="224" class="small">只有最后一维从 in→out</text>
+  <text x="692" y="246" class="small">批量维原样保留</text>
+
+  <!-- why W^T -->
+  <rect x="70" y="320" width="530" height="250" rx="14" class="card"/>
+  <text x="94" y="352" class="head">为什么权重存成 (out_features, in_features)</text>
+  <text x="94" y="384" class="body">1. 每个输出通道对应权重矩阵的**一行**，直观且利于初始化；</text>
+  <text x="94" y="410" class="body">2. 与 state_dict 的官方命名/形状兼容，便于加载官方权重；</text>
+  <text x="94" y="436" class="body">3. 计算时对最后一维做 x · Wᵀ，天然支持任意前置批量维。</text>
+  <text x="94" y="474" class="mono">y[..., o] = Σᵢ x[..., i] · W[o, i]   (+ b[o])</text>
+  <text x="94" y="510" class="small">用 einsum 表达："... i, o i -&gt; ... o"</text>
+  <text x="94" y="540" class="small">（本图只解释语义，不是作业实现代码）</text>
+
+  <!-- assignment variant -->
+  <rect x="630" y="320" width="500" height="250" rx="14" class="card"/>
+  <text x="654" y="352" class="head">作业要求的变体：无 bias</text>
+  <text x="654" y="386" class="body">标准 nn.Linear：<tspan class="mono">Linear(in, out, bias=True)</tspan></text>
+  <text x="654" y="414" class="body">作业版：**没有 bias 参数**，只保留 weight。</text>
+  <text x="654" y="446" class="mono">y = x · Wᵀ         （去掉 + b）</text>
+  <text x="654" y="486" class="body">推荐接口（来自 handout）：</text>
+  <text x="654" y="514" class="mono">Linear(d_in, d_out, device=None, dtype=None)</text>
+  <text x="654" y="544" class="small">weight 用 nn.Parameter 登记；具体实现请自己完成。</text>
+</svg>

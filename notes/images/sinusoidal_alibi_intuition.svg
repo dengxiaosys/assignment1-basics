@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+  <title id="title">Sinusoidal multi-wavelength encoding and ALiBi linear bias</title>
+  <desc id="desc">Left: sinusoidal position encoding stacks sine and cosine waves of different wavelengths, so each position maps to a unique multi-frequency signature. Right: ALiBi subtracts a penalty proportional to the query-key distance times a per-head slope, biasing attention toward nearby tokens.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#ecfeff"/>
+    </linearGradient>
+    <filter id="shadow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <style>
+      .title { font: 700 27px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 18px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 12px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 13px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow2); }
+      .axis { stroke: #94a3b8; stroke-width: 1.5; }
+      .cell { stroke: #ffffff; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="600" fill="url(#bg2)"/>
+  <text x="60" y="46" class="title">两种代表性"其它"编码的直觉</text>
+  <text x="60" y="74" class="subtitle">左：正弦编码用多种波长叠加，给每个位置一个独一无二的多频率签名；右：ALiBi 按距离线性扣分。</text>
+
+  <!-- Left: sinusoidal waves -->
+  <rect x="55" y="100" width="545" height="470" rx="16" class="card"/>
+  <rect x="55" y="100" width="545" height="44" rx="16" fill="#dbeafe"/>
+  <text x="80" y="129" class="head">正弦位置编码：不同波长的正余弦</text>
+
+  <g transform="translate(90,175)">
+    <line class="axis" x1="0" y1="60" x2="470" y2="60"/>
+    <path d="M0 60 Q 29 6 58 60 T 116 60 T 174 60 T 232 60 T 290 60 T 348 60 T 406 60 T 464 60" fill="none" stroke="#ef4444" stroke-width="2.6"/>
+    <text x="392" y="26" class="small" fill="#ef4444">高频（短波长）</text>
+  </g>
+  <g transform="translate(90,275)">
+    <line class="axis" x1="0" y1="60" x2="470" y2="60"/>
+    <path d="M0 60 Q 58 0 116 60 T 232 60 T 348 60 T 464 60" fill="none" stroke="#f59e0b" stroke-width="2.6"/>
+    <text x="392" y="20" class="small" fill="#d97706">中频</text>
+  </g>
+  <g transform="translate(90,375)">
+    <line class="axis" x1="0" y1="60" x2="470" y2="60"/>
+    <path d="M0 60 Q 116 -6 232 60 T 464 60" fill="none" stroke="#3b82f6" stroke-width="2.6"/>
+    <text x="392" y="18" class="small" fill="#1d4ed8">低频（长波长）</text>
+  </g>
+
+  <line x1="200" y1="165" x2="200" y2="445" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="150" y="470" class="small" fill="#8b5cf6">同一位置</text>
+  <text x="90" y="500" class="body">每个位置在各频率上取值不同，组合成唯一"指纹"。</text>
+  <text x="90" y="522" class="mono">PE(pos,2i)=sin(pos/10000^(2i/d))</text>
+  <text x="90" y="544" class="mono">PE(pos,2i+1)=cos(pos/10000^(2i/d))</text>
+
+  <!-- Right: ALiBi -->
+  <rect x="625" y="100" width="520" height="470" rx="16" class="card"/>
+  <rect x="625" y="100" width="520" height="44" rx="16" fill="#dcfce7"/>
+  <text x="650" y="129" class="head">ALiBi：按"距离 × 斜率"线性扣分</text>
+
+  <!-- query fixed, keys at distances -->
+  <text x="650" y="180" class="body">固定一个 query，对越远的 key 施加越大的惩罚：</text>
+
+  <g transform="translate(650,210)">
+    <!-- bars decreasing -->
+    <rect x="0"   y="10"  width="60" height="40" rx="6" fill="#bbf7d0" stroke="#22c55e"/>
+    <text x="14" y="36" class="mono">0</text>
+    <rect x="80"  y="10"  width="60" height="40" rx="6" fill="#bbf7d0" stroke="#22c55e"/>
+    <text x="90" y="36" class="mono">-1m</text>
+    <rect x="160" y="10"  width="60" height="40" rx="6" fill="#fde68a" stroke="#f59e0b"/>
+    <text x="170" y="36" class="mono">-2m</text>
+    <rect x="240" y="10"  width="60" height="40" rx="6" fill="#fecaca" stroke="#f87171"/>
+    <text x="250" y="36" class="mono">-3m</text>
+    <rect x="320" y="10"  width="60" height="40" rx="6" fill="#fecaca" stroke="#ef4444"/>
+    <text x="330" y="36" class="mono">-4m</text>
+    <text x="0" y="78" class="small">近</text>
+    <text x="360" y="78" class="small">远</text>
+    <text x="0" y="100" class="small">对第 j 个 key 的偏置 = -(距离) × 斜率 m</text>
+  </g>
+
+  <!-- descending penalty line -->
+  <g transform="translate(650,340)">
+    <line class="axis" x1="0" y1="10" x2="380" y2="10"/>
+    <line class="axis" x1="0" y1="10" x2="0" y2="150"/>
+    <line x1="0" y1="20" x2="360" y2="140" stroke="#16a34a" stroke-width="3"/>
+    <text x="120" y="60" class="small" fill="#16a34a">惩罚随距离线性增长</text>
+    <text x="-4" y="170" class="small">分数 = q·k − m·|i−j|</text>
+  </g>
+
+  <text x="650" y="540" class="body">无需可学习参数，斜率 m 每个头不同；外推能力强。</text>
+</svg>

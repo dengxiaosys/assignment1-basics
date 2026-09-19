@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">Anatomy of torch.nn.Module</title>
+  <desc id="desc">A torch.nn.Module is a container that registers learnable Parameters, non-learnable buffers, and nested submodules into a tree, exposes a forward method for computation, and supports state_dict, to(device), and train/eval mode switching across the whole tree.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#334155" flood-opacity="0.13"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { font: 700 29px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px Inter, Arial, sans-serif; fill: #475569; }
+      .head { font: 700 17px Inter, Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 13px Inter, Arial, sans-serif; fill: #334155; }
+      .small { font: 400 11.5px Inter, Arial, sans-serif; fill: #64748b; }
+      .mono { font: 600 13px "DejaVu Sans Mono", Consolas, monospace; fill: #0f172a; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; filter: url(#shadow); }
+      .mod { fill: #dbeafe; stroke: #60a5fa; stroke-width: 1.6; }
+      .param { fill: #bbf7d0; stroke: #22c55e; stroke-width: 1.4; }
+      .buf { fill: #fde68a; stroke: #f59e0b; stroke-width: 1.4; }
+      .fwd { fill: #ede9fe; stroke: #8b5cf6; stroke-width: 1.4; }
+      .edge { stroke: #94a3b8; stroke-width: 2; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="680" fill="url(#bg)"/>
+  <text x="60" y="46" class="title">torch.nn.Module 是什么：一个会"登记零件"的容器</text>
+  <text x="60" y="74" class="subtitle">它把可学习 Parameter、不可学习 buffer、子 Module 登记成一棵树，并暴露 forward 负责计算。</text>
+
+  <!-- module tree on the left -->
+  <rect x="55" y="105" width="620" height="545" rx="16" class="card"/>
+  <text x="80" y="135" class="head">① 模块树（Module tree）</text>
+
+  <!-- root -->
+  <rect x="250" y="155" width="230" height="52" rx="10" class="mod"/>
+  <text x="272" y="187" class="mono">MyModel(nn.Module)</text>
+
+  <!-- level 2 submodules -->
+  <line class="edge" x1="365" y1="207" x2="180" y2="255" marker-end="url(#arrow)"/>
+  <line class="edge" x1="365" y1="207" x2="430" y2="255" marker-end="url(#arrow)"/>
+  <line class="edge" x1="365" y1="207" x2="600" y2="255" marker-end="url(#arrow)"/>
+
+  <rect x="95" y="258" width="170" height="48" rx="9" class="mod"/>
+  <text x="112" y="288" class="mono">Linear (子模块)</text>
+  <rect x="345" y="258" width="170" height="48" rx="9" class="mod"/>
+  <text x="362" y="288" class="mono">FFN (子模块)</text>
+  <rect x="520" y="258" width="130" height="48" rx="9" class="mod"/>
+  <text x="537" y="288" class="mono">Norm ...</text>
+
+  <!-- linear's params -->
+  <line class="edge" x1="180" y1="306" x2="180" y2="345" marker-end="url(#arrow)"/>
+  <rect x="95" y="348" width="170" height="46" rx="9" class="param"/>
+  <text x="112" y="376" class="mono">weight: Parameter</text>
+
+  <!-- ffn params -->
+  <line class="edge" x1="430" y1="306" x2="430" y2="345" marker-end="url(#arrow)"/>
+  <rect x="345" y="348" width="170" height="46" rx="9" class="param"/>
+  <text x="362" y="376" class="mono">w1,w2: Parameter</text>
+
+  <text x="95" y="440" class="body">树是**递归**的：子模块的参数自动归属父模块。</text>
+  <text x="95" y="464" class="mono">model.parameters()  # 递归收集全部 Parameter</text>
+  <text x="95" y="486" class="mono">model.named_parameters()</text>
+  <text x="95" y="508" class="mono">model.state_dict()  # 权重的可保存快照</text>
+
+  <!-- legend -->
+  <rect x="95" y="540" width="20" height="20" rx="4" class="param"/>
+  <text x="124" y="556" class="small">Parameter：可学习，参与反向传播</text>
+  <rect x="95" y="570" width="20" height="20" rx="4" class="buf"/>
+  <text x="124" y="586" class="small">buffer：随模型走但不训练（如 running_mean、RoPE 缓存）</text>
+  <rect x="95" y="600" width="20" height="20" rx="4" class="mod"/>
+  <text x="124" y="616" class="small">Module / 子 Module：容器节点</text>
+
+  <!-- right: what you override + services -->
+  <rect x="700" y="105" width="445" height="260" rx="16" class="card"/>
+  <text x="724" y="135" class="head">② 你要重写的两个方法</text>
+  <rect x="724" y="155" width="395" height="72" rx="10" class="mod"/>
+  <text x="742" y="182" class="mono">__init__(self, ...)</text>
+  <text x="742" y="204" class="small">创建并登记 Parameter / 子模块（先调 super().__init__()）</text>
+  <rect x="724" y="245" width="395" height="90" rx="10" class="fwd"/>
+  <text x="742" y="272" class="mono">forward(self, x)</text>
+  <text x="742" y="294" class="small">定义"输入→输出"的计算；调用 model(x) 时被触发</text>
+  <text x="742" y="316" class="small">（不要直接调 model.forward(x)，用 model(x)）</text>
+
+  <rect x="700" y="385" width="445" height="265" rx="16" class="card"/>
+  <text x="724" y="415" class="head">③ 基类免费提供的服务</text>
+  <text x="724" y="446" class="mono">model.to("cuda") / .half()</text>
+  <text x="724" y="468" class="small">一次性把整棵树的参数搬设备 / 改精度</text>
+  <text x="724" y="494" class="mono">model.train() / model.eval()</text>
+  <text x="724" y="516" class="small">整棵树切换训练/推理模式（影响 Dropout、BN 等）</text>
+  <text x="724" y="542" class="mono">model.state_dict() / load_state_dict()</text>
+  <text x="724" y="564" class="small">保存 / 加载权重</text>
+  <text x="724" y="590" class="mono">register_buffer(...) / register_parameter(...)</text>
+  <text x="724" y="612" class="small">显式登记 buffer / 参数</text>
+  <text x="724" y="638" class="small">这些都靠"登记机制"自动作用到整棵树——这正是继承 Module 的意义。</text>
+</svg>
