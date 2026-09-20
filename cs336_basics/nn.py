@@ -148,3 +148,21 @@ def softmax(x: Tensor, dim: int) -> Tensor:
     x_max = x.max(dim=dim, keepdim=True).values
     x_exp = torch.exp(x - x_max)
     return x_exp / x_exp.sum(dim=dim, keepdim=True)
+
+
+def scaled_dot_product_attention(
+    Q: Tensor, K: Tensor, V: Tensor, mask: Tensor | None = None
+) -> Tensor:
+    """缩放点积注意力：softmax(QK^T / sqrt(d_k) + mask_bias) V。
+
+    Q: (..., queries, d_k)  K: (..., keys, d_k)  V: (..., keys, d_v)
+    mask: (..., queries, keys) 布尔，True=参与注意力，False=屏蔽（置 -inf）。
+    """
+    d_k = Q.shape[-1]
+    # 打分并缩放：(..., queries, keys)
+    scores = Q @ K.transpose(-2, -1) / math.sqrt(d_k)
+    if mask is not None:
+        # False 的位置置 -inf，softmax 后权重趋于 0。
+        scores = scores.masked_fill(~mask, float("-inf"))
+    attn = softmax(scores, dim=-1)
+    return attn @ V

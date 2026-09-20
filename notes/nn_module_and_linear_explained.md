@@ -79,6 +79,14 @@ model.load_state_dict(sd) # 加载权重
 
 这就是"继承 `nn.Module`"真正的价值：**用登记换服务**。
 
+> **推论：什么时候该用 `nn.Module` 类，什么时候写成普通函数？** 既然 Module 的价值是"管理需要随模型走的状态"，判断标准就很清晰：
+>
+> 1. **有可学习参数（`nn.Parameter`）→ 用类**：如 `Linear`（weight）、`Embedding`、`RMSNorm`（增益 $g$）、`SwiGLU`（三个子 Linear）。这些需要被优化器更新、进 `state_dict`。
+> 2. **有需要随模型走的持久/半持久状态（`buffer`）→ 也用类**：如 `RotaryPositionalEmbedding`——它**没有可学习参数**，但有 `cos/sin` 缓存需要 `register_buffer`、随 `.to(device)` 搬运，所以仍写成类。
+> 3. **两者都没有、纯输入→输出的计算 → 写成函数**：如 `silu`、`softmax`、`scaled_dot_product_attention`。它们无状态、不保留任何跨调用信息，套一层 `nn.Module` 只是徒增样板。
+>
+> 一句话：**有状态（参数或 buffer）用类，纯计算用函数。** 注意"有没有可学习参数"不是唯一标准——RoPE 就是"无参数但有 buffer 故用类"的典型边界情况。
+
 ### 2.5 `nn.Module` 常用接口速查
 
 按用途分组，常用的接口如下（大多**由基类提供、直接用**，无需自己写）：
