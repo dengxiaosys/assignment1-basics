@@ -166,3 +166,42 @@ def scaled_dot_product_attention(
         scores = scores.masked_fill(~mask, float("-inf"))
     attn = softmax(scores, dim=-1)
     return attn @ V
+
+
+class MultiHeadSelfAttention(nn.Module):
+    """因果多头自注意力（Vaswani et al. 2017, §3.2.2）。
+
+    QKV 用单个大矩阵一次投影，再拆成 num_heads 个头并行做 SDPA，
+    最后合头并过输出投影。可选传入 rope 对每个头的 Q/K 施加旋转。
+    """
+
+    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None):
+        super().__init__()
+        assert d_model % num_heads == 0, "d_model 必须能被 num_heads 整除"
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.q_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.k_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.v_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.output_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+
+    def forward(self, x: Tensor, token_positions: Tensor | None = None, rope=None) -> Tensor:
+        *batch, seq, _ = x.shape
+        # 单次大矩阵投影，(..., seq, d_model)
+        Q, K, V = self.q_proj(x), self.k_proj(x), self.v_proj(x)
+        # 拆头：(..., seq, d_model) -> (..., num_heads, seq, head_dim)
+        def split_heads(t: Tensor) -> Tensor:
+            return t.reshape(*batch, seq, self.num_heads, self.head_dim).transpose(-3, -2)
+        Q, K, V = split_heads(Q), split_heads(K), split_heads(V)
+        # 可选 RoPE：只转 Q/K（逐头）
+        if rope is not None:
+            Q = rope(Q, token_positions)
+            K = rope(K, token_positions)
+        # 因果掩码：下三角 True，表示只能看自己和之前
+        mask = torch.tril(torch.ones(seq, seq, dtype=torch.bool, device=x.device))
+        # SDPA：(..., num_heads, seq, head_dim)
+        out = scaled_dot_product_attention(Q, K, V, mask)
+        # 合头：(..., num_heads, seq, head_dim) -> (..., seq, d_model)
+        out = out.transpose(-3, -2).reshape(*batch, seq, self.d_model)
+        return self.output_proj(out)
