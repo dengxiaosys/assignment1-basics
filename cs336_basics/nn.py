@@ -102,3 +102,42 @@ class SwiGLU(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.w2(silu(self.w1(x)) * self.w3(x))
+
+
+class RotaryPositionalEmbedding(nn.Module):
+    """RoPE：对 Q/K 按位置旋转，只作用于相邻二维对。
+
+    频率 theta_i = base^(-2i/d)，i=0..d/2-1（base 即 theta，常取 10000）。
+    对每对 (x_{2i}, x_{2i+1})，在位置 pos 处旋转角 pos*theta_i：
+        x'_{2i}   = x_{2i} cos - x_{2i+1} sin
+        x'_{2i+1} = x_{2i} sin + x_{2i+1} cos
+    cos/sin 预计算并登记为 buffer（不可训练、随模型走）。
+    """
+
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+        super().__init__()
+        assert d_k % 2 == 0, "d_k 必须为偶数（按二维对分组）"
+        self.d_k = d_k
+        # 每对的频率：(d_k/2,)
+        inv_freq = theta ** (-torch.arange(0, d_k, 2, device=device).float() / d_k)
+        # 位置 × 频率 -> 角度表 (max_seq_len, d_k/2)
+        pos = torch.arange(max_seq_len, device=device).float()
+        angles = torch.outer(pos, inv_freq)
+        self.register_buffer("cos_cached", torch.cos(angles), persistent=False)
+        self.register_buffer("sin_cached", torch.sin(angles), persistent=False)
+
+    def forward(self, x: Tensor, token_positions: Tensor) -> Tensor:
+        # 按位置取角度：cos/sin 形状 (..., seq, d_k/2)
+        cos = self.cos_cached[token_positions]
+        sin = self.sin_cached[token_positions]
+        # 拆成相邻二维对的偶/奇分量
+        x_even = x[..., 0::2]
+        x_odd = x[..., 1::2]
+        # 逐对旋转
+        out_even = x_even * cos - x_odd * sin
+        out_odd = x_even * sin + x_odd * cos
+        # 交错拼回原顺序 (..., d_k)
+        out = torch.empty_like(x)
+        out[..., 0::2] = out_even
+        out[..., 1::2] = out_odd
+        return out
