@@ -205,3 +205,30 @@ class MultiHeadSelfAttention(nn.Module):
         # 合头：(..., num_heads, seq, head_dim) -> (..., seq, d_model)
         out = out.transpose(-3, -2).reshape(*batch, seq, self.d_model)
         return self.output_proj(out)
+
+
+class TransformerBlock(nn.Module):
+    """Pre-Norm Transformer block（含 RoPE）。
+
+    y = x + MHA(RMSNorm(x))          # 注意力子层
+    out = y + FFN(RMSNorm(y))        # 前馈子层
+    归一化放在子层之前（Pre-Norm），残差绕过归一化直连。
+    """
+
+    def __init__(self, d_model: int, num_heads: int, d_ff: int,
+                 max_seq_len: int, theta: float, device=None, dtype=None):
+        super().__init__()
+        self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.attn = MultiHeadSelfAttention(d_model, num_heads, device=device, dtype=dtype)
+        self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.ffn = SwiGLU(d_model, d_ff, device=device, dtype=dtype)
+        self.rope = RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len, device=device)
+
+    def forward(self, x: Tensor, token_positions: Tensor | None = None) -> Tensor:
+        if token_positions is None:
+            seq = x.shape[-2]
+            token_positions = torch.arange(seq, device=x.device)
+        # Pre-Norm：先归一化再进子层，残差直连原始输入
+        x = x + self.attn(self.ln1(x), token_positions=token_positions, rope=self.rope)
+        x = x + self.ffn(self.ln2(x))
+        return x
