@@ -141,3 +141,10 @@ class RotaryPositionalEmbedding(nn.Module):
         out[..., 0::2] = out_even
         out[..., 1::2] = out_odd
         return out
+
+
+def softmax(x: Tensor, dim: int) -> Tensor:
+    # 数值稳定：先减去该维最大值，避免 exp 溢出（softmax 平移不变）。
+    x_max = x.max(dim=dim, keepdim=True).values
+    x_exp = torch.exp(x - x_max)
+    return x_exp / x_exp.sum(dim=dim, keepdim=True)
