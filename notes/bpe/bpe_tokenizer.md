@@ -114,7 +114,7 @@ $$ x=t_1\Vert t_2\Vert\cdots\Vert t_n. $$
 
 ## 3. 粒度选择的基本矛盾
 
-![Tokenization 粒度之间的系统权衡](./images/tokenization_granularity_tradeoff.svg)
+![Tokenization 粒度之间的系统权衡](../images/tokenization_granularity_tradeoff.svg)
 
 图 1：从词级到字节级，基础词表逐渐缩小，覆盖能力增强，但序列通常变长。
 

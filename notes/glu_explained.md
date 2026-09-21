@@ -11,7 +11,7 @@
 3. 第 4–5 节：GLU 家族（ReGLU/GEGLU/SwiGLU 等）与参数量对齐的工程细节；
 4. 第 6 节起：为什么它有效、历史脉络、优缺点与相关设计。
 
-本讲义与同目录的 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)、[byte_level_bpe_worked_example.md](./byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。上一篇讲"归一化放在哪里"，这一篇讲"前馈子层内部怎么算"，两者都作用在同一个 Transformer 层里。
+本讲义与同目录的 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)、以及 [bpe/byte_level_bpe_worked_example.md](./bpe/byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。上一篇讲"归一化放在哪里"，这一篇讲"前馈子层内部怎么算"，两者都作用在同一个 Transformer 层里。
 
 > 说明：本文是概念讲解，不含任何作业实现代码。文中 `(xW) ⊗ σ(xV)` 等是数学表达式，用于解释原理，而非可直接粘贴的作业答案。
 
