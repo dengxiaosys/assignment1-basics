@@ -321,3 +321,18 @@ class AdamW(torch.optim.Optimizer):
                 p.data.addcdiv_(m, v.sqrt().add_(eps), value=-lr_t)
                 state["t"] = t
         return loss
+
+
+def get_lr_cosine_schedule(it, max_lr, min_lr, warmup_iters, cosine_cycle_iters):
+    """带线性 warmup 的余弦退火学习率调度。
+
+    - warmup (it < T_w):       lr = it/T_w * max_lr
+    - cosine (T_w<=it<=T_c):   lr = min_lr + 0.5*(1+cos((it-T_w)/(T_c-T_w)*pi))*(max_lr-min_lr)
+    - post   (it > T_c):       lr = min_lr
+    """
+    if it < warmup_iters:
+        return it / warmup_iters * max_lr
+    if it <= cosine_cycle_iters:
+        coeff = 0.5 * (1 + math.cos((it - warmup_iters) / (cosine_cycle_iters - warmup_iters) * math.pi))
+        return min_lr + coeff * (max_lr - min_lr)
+    return min_lr
