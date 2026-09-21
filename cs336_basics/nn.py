@@ -260,3 +260,19 @@ class TransformerLM(nn.Module):
             x = layer(x)
         x = self.ln_final(x)
         return self.lm_head(x)                  # (.., seq, vocab_size)
+
+
+def cross_entropy(inputs: Tensor, targets: Tensor) -> Tensor:
+    """平均交叉熵损失。
+
+    inputs: (N, vocab) 未归一化 logits；targets: (N,) 正确类别索引。
+    用 log-sum-exp 稳定：loss_i = -logit[target] + logsumexp(logits)。
+    """
+    # 数值稳定：减去每行最大值（不改变 softmax/交叉熵的值）。
+    x_max = inputs.max(dim=-1, keepdim=True).values
+    shifted = inputs - x_max
+    log_sum_exp = torch.log(torch.exp(shifted).sum(dim=-1))  # (N,)
+    # 取每个样本目标类的 logit（同样减了 max）
+    target_logit = shifted.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)  # (N,)
+    loss = log_sum_exp - target_logit  # 每样本 -log p
+    return loss.mean()
