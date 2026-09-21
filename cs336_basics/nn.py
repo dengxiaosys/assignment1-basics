@@ -336,3 +336,19 @@ def get_lr_cosine_schedule(it, max_lr, min_lr, warmup_iters, cosine_cycle_iters)
         coeff = 0.5 * (1 + math.cos((it - warmup_iters) / (cosine_cycle_iters - warmup_iters) * math.pi))
         return min_lr + coeff * (max_lr - min_lr)
     return min_lr
+
+
+def gradient_clipping(parameters, max_l2_norm, eps=1e-6):
+    """按所有梯度拼起来的全局 L2 范数裁剪，就地修改 grad。
+
+    total_norm = sqrt(sum ||g||^2)；若 > max_l2_norm，则所有梯度 ×(max_l2_norm/(total_norm+eps))。
+    跳过 grad 为 None 的参数（如 frozen 参数）。
+    """
+    grads = [p.grad for p in parameters if p.grad is not None]
+    if not grads:
+        return
+    total_norm = torch.sqrt(sum((g ** 2).sum() for g in grads))
+    if total_norm > max_l2_norm:
+        scale = max_l2_norm / (total_norm + eps)
+        for g in grads:
+            g.mul_(scale)
