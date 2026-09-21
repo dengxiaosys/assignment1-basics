@@ -164,3 +164,6 @@ cython_debug/
 
 # Datasets (large corpora downloaded locally, e.g. TinyStories / OpenWebText)
 /data/
+
+# Trained BPE artifacts (vocab/merges), model checkpoints
+/bpe_out/

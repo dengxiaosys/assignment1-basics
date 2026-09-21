@@ -106,16 +106,19 @@ UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe7 in position 0: unexpect
 
 ## 4. `train_bpe_tinystories`（问答部分）
 
-> 编码任务（写 `run_train_bpe`）不在本文；这里只答两个观察问题。标 🔧 者需训练后回填。
+> 已在本机（56 核，`num_processes=16`）实跑，数值为实测；实验脚本见 [train_bpe_experiment.py](../../cs336_basics/train_bpe_experiment.py)，详细说明见 [train_bpe_tinystories_experiment_notes.md](./train_bpe_tinystories_experiment_notes.md)。
 
 ### (a) 训练耗时/内存？最长 token 是什么？合理吗？
 
-- **耗时/内存** 🔧：handout 给的约束是 ≤30 分钟、≤30 GB RAM；并提示**用 `multiprocessing` 并行预分词 + 把 `<|endoftext|>` 作为文档边界特判**，可压到 **2 分钟以内**。TinyStories train 约 2GB，词表 10K，实测通常几十秒到 2 分钟、内存几个 GB 量级。〔实测值待训练后填入〕
-- **最长 token & 是否合理** 🔧：预期**最长 token 往往是带前导空格的常见完整单词**（如 `' different'`、`' something'` 这类，含前导空格是因为 GPT-2 正则把空格并入词首）。TinyStories 是**幼儿向、词汇极简且高度重复**的合成故事，所以高频长词（如 `remembered`、`beautiful`、`something`）会被合并成单 token——**合理**：BPE 就是把高频串压成一个 token，语料越同质、长词越容易整体成词。〔最长 token 的具体字节待回填〕
+- **耗时/内存**（实测）：TinyStories train（2.1 GB，约 4.4 亿词）训练 vocab_size=10000，**耗时约 155 秒（2.6 分钟）**，主进程峰值 RSS 约 0.13 GB（子进程另计，整体也远低于 handout 的 30 GB 上限）。用 `multiprocessing` 并行预分词（16 进程）+ 把 `<|endoftext|>` 作为文档边界切块，符合 handout"2 分钟量级"的提示。
+- **最长 token & 是否合理**（实测）：最长 token 是 **`b' accomplishment'`（15 字节，含前导空格）**；紧随其后的还有 `b' disappointment'`、`b' responsibility'`、`b' understanding'`、`b' compassionate'`、`b' Unfortunately'` 等。**非常合理**：这些都是 TinyStories（幼儿教育故事）里高频出现的完整长单词；BPE 把高频串压成单 token，语料越同质、这类长词越容易整体成词。前导空格是因为 GPT-2 正则把词首空格并入词里（`" accomplishment"`）。
 
 ### (b) profile 一下，哪一步最耗时？
 
-**预期是预分词（pre-tokenization）最耗时** 🔧。原因：预分词要用 GPT-2 的复杂正则 `re.finditer` 扫过**整个语料**（GB 级），是一次全量字符串遍历；而后续的合并循环只在**预分词后的计数表**（`dict[tuple[bytes,...], int]`）上做，规模小得多。这正是 handout 建议**并行化预分词**的原因——它是瓶颈。合并步虽然要迭代 `vocab_size-256` 次，但每次只更新受影响的对计数，总量远小于一次全语料扫描。〔profile 数字待回填〕
+**实测（并行 16 进程后）**：预分词 **64.3s（44%）**、合并循环 **82.0s（56%）**，去重后预 token 仅约 6 万个。
+
+- 值得注意的转折：**并行化之前**，预分词（用 GPT-2 复杂正则 `re.finditer` 扫过 GB 级全语料）是**绝对瓶颈**；一旦用 `multiprocessing` 把它分摊到 16 进程，预分词占比就降到 44%，反倒是**纯 Python 单线程的合并循环**（9743 轮 `max` + 增量更新）成了略大的一头（56%）。
+- 换句话说：**单进程时预分词最慢，是首要优化目标（并行）；并行后瓶颈转移到合并循环**——要再快就得优化合并（如堆维护最大频次、或用系统语言）。这与 handout"预分词是主瓶颈、建议并行"的指引一致，也解释了为什么并行是这道题达标（<2 分钟量级）的关键。
 
 **背景：为什么预分词能加速合并**。预分词把语料压成"预 token → 频次"的表：`text` 出现 10 次就只存一条 `{(t,e,x,t):10}`，统计相邻对 `(t,e)` 时直接加 10，而不必在原文里逐处扫描。合并也**不跨预 token 边界**（避免 `dog!` 和 `dog.` 因标点被合成怪 token）。
 

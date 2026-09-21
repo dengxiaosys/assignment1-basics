@@ -15,10 +15,92 @@
 import os
 import regex as re
 from collections import Counter, defaultdict
-from typing import Iterable, Iterator
+from typing import BinaryIO, Iterable, Iterator
 
 # GPT-2 预分词正则（取自 tiktoken#234），需要 `regex` 包支持 \p{L}\p{N}。
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
+
+def gpt2_bytes_to_unicode_safe() -> dict[int, str]:
+    """GPT-2 的"字节(0-255) → 可打印 Unicode 字符"可逆映射。
+
+    用于把 bytes 词表/merges 序列化成人类可读、可往返的字符串（与 tiktoken/测试格式一致）。
+    可打印字节保留原字符，不可打印字节平移到 256+ 区间的可打印码点。
+    """
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    cs = bs[:]
+    n = 0
+    for b in range(2 ** 8):
+        if b not in bs:
+            bs.append(b)
+            cs.append(2 ** 8 + n)
+            n += 1
+    return {b: chr(c) for b, c in zip(bs, cs)}
+
+
+def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special_token: bytes) -> list[int]:
+    """把文件切成若干可独立处理的块，块边界对齐到 split_special_token（如 b"<|endoftext|>"）。
+
+    先按文件大小等分给出初始边界，再把每个边界往后挪到最近的一个 special token 处，
+    保证不会把一个"预 token"或文档劈成两半。返回去重排序后的字节偏移列表（可能少于
+    desired_num_chunks）。改写自 handout 的 pretokenization_example.find_chunk_boundaries。
+    """
+    assert isinstance(split_special_token, bytes)
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+
+    chunk_size = file_size // desired_num_chunks
+    boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
+    boundaries[-1] = file_size
+
+    mini_chunk_size = 4096
+    for bi in range(1, len(boundaries) - 1):
+        pos = boundaries[bi]
+        file.seek(pos)
+        while True:
+            mini = file.read(mini_chunk_size)
+            if mini == b"":  # EOF
+                boundaries[bi] = file_size
+                break
+            found = mini.find(split_special_token)
+            if found != -1:
+                boundaries[bi] = pos + found
+                break
+            pos += mini_chunk_size
+    return sorted(set(boundaries))
+
+
+def _count_chunk(args: tuple[str, int, int, list[str]]) -> Counter:
+    """（供多进程调用）读取文件 [start, end) 区间、预分词并返回计数。"""
+    input_path, start, end, special_tokens = args
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        text = f.read(end - start).decode("utf-8", errors="ignore")
+    return _pretoken_counts(text, special_tokens)
+
+
+def _pretoken_counts_parallel(input_path: str | os.PathLike, special_tokens: list[str], num_processes: int) -> Counter:
+    """并行预分词：按 special token 边界切块，多进程各自计数后合并。
+
+    切块对齐到 special token（默认用第一个，通常是 <|endoftext|>），确保分块统计与
+    整体统计结果完全一致（合并从不跨文档边界）。
+    """
+    import multiprocessing as mp
+
+    split_tok = (special_tokens[0] if special_tokens else "<|endoftext|>").encode("utf-8")
+    with open(input_path, "rb") as f:
+        boundaries = find_chunk_boundaries(f, num_processes, split_tok)
+
+    tasks = [
+        (str(input_path), start, end, special_tokens)
+        for start, end in zip(boundaries[:-1], boundaries[1:])
+    ]
+    total: Counter = Counter()
+    with mp.Pool(num_processes) as pool:
+        for c in pool.map(_count_chunk, tasks):
+            total.update(c)
+    return total
 
 
 def _pretoken_counts(text: str, special_tokens: list[str]) -> Counter:
@@ -68,21 +150,27 @@ def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
+    num_processes: int = 1,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """训练字节级 BPE，返回 (vocab, merges)。
 
     vocab: {token_id: token_bytes}
     merges: [(token1_bytes, token2_bytes), ...] 按创建顺序。
+    num_processes: >1 时并行预分词（按 special token 边界切块），用于大语料加速；
+        =1 时整体读入单进程处理（小文件/单测路径）。两种路径结果一致。
     """
     # ---- 1) 初始词表：256 字节 + special tokens ----
     vocab: dict[int, bytes] = {i: bytes([i]) for i in range(256)}
     for tok in special_tokens:
         vocab[len(vocab)] = tok.encode("utf-8")
 
-    # ---- 2) 预分词计数 ----
-    with open(input_path, encoding="utf-8") as f:
-        text = f.read()
-    word_counts = dict(_pretoken_counts(text, special_tokens))
+    # ---- 2) 预分词计数（可选并行）----
+    if num_processes > 1:
+        word_counts = dict(_pretoken_counts_parallel(input_path, special_tokens, num_processes))
+    else:
+        with open(input_path, encoding="utf-8") as f:
+            text = f.read()
+        word_counts = dict(_pretoken_counts(text, special_tokens))
 
     # ---- 3) 迭代合并，直到达到目标词表大小（增量更新，避免每轮全扫）----
     # 用 list 存所有词，便于用下标做倒排索引。
@@ -172,9 +260,8 @@ class Tokenizer:
         采用 GPT-2 的"字节↔可打印字符"映射来解析磁盘格式（与 tests 的存储格式一致）。
         """
         import json
-        from tests.common import gpt2_bytes_to_unicode  # 复用测试里的字节映射
 
-        byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
+        byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode_safe().items()}
         with open(vocab_filepath, encoding="utf-8") as f:
             raw_vocab = json.load(f)
         vocab = {
