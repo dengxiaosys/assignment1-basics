@@ -352,3 +352,21 @@ def gradient_clipping(parameters, max_l2_norm, eps=1e-6):
         scale = max_l2_norm / (total_norm + eps)
         for g in grads:
             g.mul_(scale)
+
+
+def get_batch(dataset, batch_size, context_length, device):
+    """从 1D token 数组随机采样语言建模的 (输入, 标签) 批。
+
+    随机选 batch_size 个起点 i∈[0, len-context_length)，
+    x = dataset[i:i+ctx]，y = dataset[i+1:i+1+ctx]（右移一位，即预测下一个 token）。
+    返回放在 device 上的两个 LongTensor，形状均为 (batch_size, context_length)。
+    """
+    import numpy as np
+    max_start = len(dataset) - context_length
+    starts = np.random.randint(0, max_start, size=batch_size)
+    # 向量化切片：每个起点取 ctx / ctx+1 位
+    x = np.stack([dataset[i : i + context_length] for i in starts])
+    y = np.stack([dataset[i + 1 : i + 1 + context_length] for i in starts])
+    x = torch.tensor(x, dtype=torch.long, device=device)
+    y = torch.tensor(y, dtype=torch.long, device=device)
+    return x, y
