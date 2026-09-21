@@ -370,3 +370,29 @@ def get_batch(dataset, batch_size, context_length, device):
     x = torch.tensor(x, dtype=torch.long, device=device)
     y = torch.tensor(y, dtype=torch.long, device=device)
     return x, y
+
+
+def save_checkpoint(model, optimizer, iteration, out):
+    """把模型、优化器状态与已训练迭代数打包序列化到 out（路径或文件对象）。
+
+    三样都要存：model.state_dict()（权重）、optimizer.state_dict()（动量/二阶矩等），
+    以及标量 iteration（续训时从这一步接着走）。用 torch.save 一次性写一个 dict。
+    """
+    checkpoint = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "iteration": iteration,
+    }
+    torch.save(checkpoint, out)
+
+
+def load_checkpoint(src, model, optimizer):
+    """从 src 反序列化 checkpoint，就地恢复 model 与 optimizer，并返回保存时的迭代数。
+
+    与 save_checkpoint 对称：torch.load 读回 dict，再用 load_state_dict 把权重和
+    优化器状态灌回传入的对象（就地修改，不新建），最后返回 iteration。
+    """
+    checkpoint = torch.load(src)
+    model.load_state_dict(checkpoint["model"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    return checkpoint["iteration"]
