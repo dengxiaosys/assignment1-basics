@@ -15,6 +15,7 @@
 import os
 import regex as re
 from collections import Counter, defaultdict
+from typing import Iterable, Iterator
 
 # GPT-2 预分词正则（取自 tiktoken#234），需要 `regex` 包支持 \p{L}\p{N}。
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
@@ -137,3 +138,113 @@ def train_bpe(
         pair_to_words.pop(best_pair, None)
 
     return vocab, merges
+
+
+class Tokenizer:
+    """BPE 分词器：加载训练好的 vocab/merges，做 encode（文本→id）与 decode（id→文本）。
+
+    编码流程与训练时镜像：special token 切分 → GPT-2 正则预分词 → 按 merges 的
+    创建顺序在每个预 token 内应用合并 → 查 vocab 得到 id。
+    """
+
+    def __init__(
+        self,
+        vocab: dict[int, bytes],
+        merges: list[tuple[bytes, bytes]],
+        special_tokens: list[str] | None = None,
+    ):
+        self.vocab = vocab                                  # id -> bytes
+        self.byte_to_id = {b: i for i, b in vocab.items()}  # bytes -> id（decode/查表用）
+        self.merges = merges
+        # merge 的优先级：越早创建 rank 越小，编码时优先应用 rank 最小的可合并对。
+        self.merge_rank = {pair: r for r, pair in enumerate(merges)}
+        self.special_tokens = special_tokens or []
+
+    @classmethod
+    def from_files(
+        cls,
+        vocab_filepath: str,
+        merges_filepath: str,
+        special_tokens: list[str] | None = None,
+    ) -> "Tokenizer":
+        """从序列化的 vocab（json: {token_str: id}）与 merges（每行 "tok1 tok2"）构造。
+
+        采用 GPT-2 的"字节↔可打印字符"映射来解析磁盘格式（与 tests 的存储格式一致）。
+        """
+        import json
+        from tests.common import gpt2_bytes_to_unicode  # 复用测试里的字节映射
+
+        byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
+        with open(vocab_filepath, encoding="utf-8") as f:
+            raw_vocab = json.load(f)
+        vocab = {
+            idx: bytes([byte_decoder[c] for c in tok])
+            for tok, idx in raw_vocab.items()
+        }
+        merges = []
+        with open(merges_filepath, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line and len(line.split(" ")) == 2:
+                    a, b = line.split(" ")
+                    merges.append(
+                        (bytes([byte_decoder[c] for c in a]), bytes([byte_decoder[c] for c in b]))
+                    )
+        return cls(vocab, merges, special_tokens)
+
+    def _apply_merges(self, token_bytes: bytes) -> list[bytes]:
+        """把一个预 token（bytes）拆成单字节，按 merges 优先级反复合并，返回最终 token 列表。"""
+        parts = [bytes([x]) for x in token_bytes]
+        while len(parts) >= 2:
+            # 找当前所有相邻对里 rank 最小（最早创建）的一个可合并对
+            best_rank = None
+            best_i = -1
+            for i in range(len(parts) - 1):
+                pair = (parts[i], parts[i + 1])
+                r = self.merge_rank.get(pair)
+                if r is not None and (best_rank is None or r < best_rank):
+                    best_rank = r
+                    best_i = i
+            if best_rank is None:
+                break  # 没有可合并的对了
+            # 合并 best_i 处的这一对
+            parts[best_i : best_i + 2] = [parts[best_i] + parts[best_i + 1]]
+        return parts
+
+    def _encode_chunk(self, text: str) -> list[int]:
+        """对不含 special token 的一段文本编码（GPT-2 正则预分词 + 逐预 token 合并）。"""
+        ids: list[int] = []
+        for match in re.finditer(PAT, text):
+            token_bytes = match.group().encode("utf-8")
+            for part in self._apply_merges(token_bytes):
+                ids.append(self.byte_to_id[part])
+        return ids
+
+    def encode(self, text: str) -> list[int]:
+        """把文本编码成 token id 列表。"""
+        if not self.special_tokens:
+            return self._encode_chunk(text)
+
+        # 按长度降序排序：保证重叠时优先匹配更长的 special token（如
+        # "<|endoftext|><|endoftext|>" 先于 "<|endoftext|>"）。
+        specials = sorted(self.special_tokens, key=len, reverse=True)
+        pattern = "(" + "|".join(re.escape(s) for s in specials) + ")"
+        ids: list[int] = []
+        for segment in re.split(pattern, text):
+            if segment == "":
+                continue
+            if segment in self.special_tokens:
+                ids.append(self.byte_to_id[segment.encode("utf-8")])
+            else:
+                ids.extend(self._encode_chunk(segment))
+        return ids
+
+    def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+        """惰性编码：逐块（如文件按行）产出 id，内存占用与文件大小无关。"""
+        for chunk in iterable:
+            yield from self.encode(chunk)
+
+    def decode(self, ids: list[int]) -> str:
+        """把 token id 列表解码回文本；非法字节用 U+FFFD 替换。"""
+        data = b"".join(self.vocab[i] for i in ids)
+        return data.decode("utf-8", errors="replace")
