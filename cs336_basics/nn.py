@@ -276,3 +276,48 @@ def cross_entropy(inputs: Tensor, targets: Tensor) -> Tensor:
     target_logit = shifted.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)  # (N,)
     loss = log_sum_exp - target_logit  # 每样本 -log p
     return loss.mean()
+
+
+class AdamW(torch.optim.Optimizer):
+    """AdamW（Loshchilov & Hutter 2019），按 handout Algorithm 1 实现。
+
+    与 Adam 的区别：权重衰减 lambda 与梯度更新解耦——直接对参数做 theta <- theta - lr*lambda*theta，
+    而非把 L2 正则加进梯度。每个参数维护一阶矩 m、二阶矩 v 和步数 t。
+    """
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
+        if lr < 0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay}
+        super().__init__(params, defaults)
+
+    def step(self, closure=None):
+        loss = None if closure is None else closure()
+        for group in self.param_groups:
+            lr = group["lr"]
+            beta1, beta2 = group["betas"]
+            eps = group["eps"]
+            weight_decay = group["weight_decay"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                grad = p.grad.data
+                state = self.state[p]
+                # 初始化状态
+                if len(state) == 0:
+                    state["t"] = 0
+                    state["m"] = torch.zeros_like(p.data)
+                    state["v"] = torch.zeros_like(p.data)
+                m, v = state["m"], state["v"]
+                t = state["t"] + 1
+                # 一阶/二阶矩估计
+                m.mul_(beta1).add_(grad, alpha=1 - beta1)
+                v.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                # 偏差校正后的学习率
+                lr_t = lr * math.sqrt(1 - beta2 ** t) / (1 - beta1 ** t)
+                # 解耦权重衰减
+                p.data.mul_(1 - lr * weight_decay)
+                # 矩调整的参数更新
+                p.data.addcdiv_(m, v.sqrt().add_(eps), value=-lr_t)
+                state["t"] = t
+        return loss
