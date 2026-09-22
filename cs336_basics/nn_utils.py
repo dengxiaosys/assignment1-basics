@@ -18,6 +18,3 @@ def cross_entropy(inputs: Tensor, targets: Tensor) -> Tensor:
     log_sum_exp = torch.log(torch.exp(shifted).sum(dim=-1))
     target_logit = shifted.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
     return (log_sum_exp - target_logit).mean()
-
-
-__all__ = ["cross_entropy", "softmax"]

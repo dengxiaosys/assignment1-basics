@@ -13,6 +13,3 @@ def get_batch(dataset, batch_size, context_length, device):
     x = torch.tensor(x, dtype=torch.long, device=device)
     y = torch.tensor(y, dtype=torch.long, device=device)
     return x, y
-
-
-__all__ = ["get_batch"]

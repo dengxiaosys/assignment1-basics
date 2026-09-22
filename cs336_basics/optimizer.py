@@ -61,6 +61,3 @@ def gradient_clipping(parameters, max_l2_norm, eps=1e-6):
         scale = max_l2_norm / (total_norm + eps)
         for grad in grads:
             grad.mul_(scale)
-
-
-__all__ = ["AdamW", "get_lr_cosine_schedule", "gradient_clipping"]

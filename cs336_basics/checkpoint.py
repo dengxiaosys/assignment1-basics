@@ -20,6 +20,3 @@ def load_checkpoint(src, model, optimizer=None, map_location=None):
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer"])
     return checkpoint["iteration"]
-
-
-__all__ = ["load_checkpoint", "save_checkpoint"]

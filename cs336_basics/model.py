@@ -233,17 +233,3 @@ class TransformerLM(nn.Module):
             x = layer(x)
         x = self.ln_final(x)
         return self.lm_head(x)
-
-
-__all__ = [
-    "Embedding",
-    "Linear",
-    "MultiHeadSelfAttention",
-    "RMSNorm",
-    "RotaryPositionalEmbedding",
-    "SwiGLU",
-    "TransformerBlock",
-    "TransformerLM",
-    "scaled_dot_product_attention",
-    "silu",
-]
