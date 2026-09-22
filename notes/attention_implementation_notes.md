@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **缩放点积注意力（SDPA）** 的实现思路：公式怎么来、为什么要除以 $\sqrt{d_k}$、布尔 mask 怎么用、adapter 怎么接到测试。这是注意力机制的**核心运算**，多头注意力就是在它外面套投影和拆头。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `scaled_dot_product_attention`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `scaled_dot_product_attention`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_scaled_dot_product_attention`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_scaled_dot_product_attention`、`test_4d_scaled_dot_product_attention`
 
@@ -123,7 +123,7 @@ uv run pytest -k scaled_dot_product
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 依赖：[softmax_implementation_notes.md](./softmax_implementation_notes.md)

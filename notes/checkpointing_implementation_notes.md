@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **checkpoint** 的实现：训练到一半怎么把"整个训练现场"存到磁盘、之后怎么原样恢复继续训。核心就两个函数——`save_checkpoint` 和 `load_checkpoint`——但背后牵涉到一个重要问题：**要恢复训练，到底需要存哪些东西？** 本文讲清这三样（模型权重、优化器状态、迭代数）为什么缺一不可，以及 `torch.save` / `state_dict` 的机制。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `save_checkpoint` / `load_checkpoint`
+- 实现：[cs336_basics/checkpoint.py](../cs336_basics/checkpoint.py) 的 `save_checkpoint` / `load_checkpoint`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_save_checkpoint` / `run_load_checkpoint`
 - 测试：[tests/test_serialization.py](../tests/test_serialization.py) 的 `test_checkpointing`
 
@@ -210,7 +210,7 @@ uv run pytest -k test_checkpointing
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/checkpoint.py](../cs336_basics/checkpoint.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_serialization.py](../tests/test_serialization.py)
 - 前置：[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)（`self.state` / `state_dict`）、[adamw_implementation_notes.md](./adamw_implementation_notes.md)（$m,v,t$ 是状态）、[lr_schedule_implementation_notes.md](./lr_schedule_implementation_notes.md)（lr 依赖迭代数）

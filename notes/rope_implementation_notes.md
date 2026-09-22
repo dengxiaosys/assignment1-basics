@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **RoPE**（`RotaryPositionalEmbedding`）的实现思路：频率怎么算、cos/sin 为什么预缓存成 buffer、"相邻配对"怎么旋转、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `RotaryPositionalEmbedding`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `RotaryPositionalEmbedding`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_rope`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_rope`
 
@@ -157,7 +157,7 @@ uv run pytest -k test_rope
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 原理背景：[rope_explained.md](./rope_explained.md)（旋转编码相对位置、多频率、长上下文扩展、与其它位置编码对比）

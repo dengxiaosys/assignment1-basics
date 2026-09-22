@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 `Linear` 层的实现思路——不是罗列代码，而是讲清楚**每个决定为什么这么做**：模块怎么搭、权重形状怎么定、`forward` 怎么算、adapter 怎么把它接到测试、以及"装权重"那一步的几种写法与取舍。
 
 对应的实际代码在本仓库：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_linear`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_linear`
 
@@ -162,7 +162,7 @@ print(lin.weight.grad is not None)   # True → 梯度确实回传到了 weight
 
 选 A 的理由：**顺带体检**（键名/形状对不对），且确保测试覆盖到 `Linear` 本身而非 adapter 里另写的等价计算。代价只是多一行。
 
-一个关键点：`{"weight": weights}` 的键 `"weight"` 必须与 `nn.py` 里的属性名 `self.weight` 一致；若命名成 `self.w`，这里就得写 `{"w": weights}`，否则 `strict=True` 会报键不匹配。
+一个关键点：`{"weight": weights}` 的键 `"weight"` 必须与 `model.py` 里的属性名 `self.weight` 一致；若命名成 `self.w`，这里就得写 `{"w": weights}`，否则 `strict=True` 会报键不匹配。
 
 ---
 
@@ -199,7 +199,7 @@ uv run pytest -k test_linear
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 背景：[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)、[pytest_fixtures_explained.md](./pytest_fixtures_explained.md)

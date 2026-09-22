@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里**数据加载** `get_batch` 的实现：语言模型训练怎么从一长串 token 里采出 `(输入, 标签)` 批、为什么标签是输入右移一位、起点怎么随机采、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `get_batch`
+- 实现：[cs336_basics/data.py](../cs336_basics/data.py) 的 `get_batch`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_get_batch`
 - 测试：[tests/test_data.py](../tests/test_data.py) 的 `test_get_batch`
 
@@ -142,7 +142,7 @@ uv run pytest -k test_get_batch
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/data.py](../cs336_basics/data.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_data.py](../tests/test_data.py)
 - 前置：[cross_entropy_implementation_notes.md](./cross_entropy_implementation_notes.md)（下一 token 预测、batch/seq 维度）

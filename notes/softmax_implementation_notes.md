@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **softmax** 的实现思路：它算什么、为什么必须"减最大值"做数值稳定、在指定维度上如何用 `keepdim` 广播、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `softmax`
+- 实现：[cs336_basics/nn_utils.py](../cs336_basics/nn_utils.py) 的 `softmax`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_softmax`
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py) 的 `test_softmax_matches_pytorch`
 
@@ -114,7 +114,7 @@ uv run pytest -k test_softmax
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/nn_utils.py](../cs336_basics/nn_utils.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py)
 - 配套：softmax 是注意力的一环，后续 `scaled_dot_product_attention` 会直接用它。

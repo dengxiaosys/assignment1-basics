@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **Transformer block** 的实现思路：它如何把前面实现的 RMSNorm、MHA、SwiGLU、RoPE 组装成一个完整的层，为什么用 **Pre-Norm** 和残差连接、adapter 怎么接到测试。这是"把零件拼成整机"的一步。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `TransformerBlock`（及本轮补上的 `run_multihead_self_attention_with_rope`）
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `TransformerBlock`（及本轮补上的 `run_multihead_self_attention_with_rope`）
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_transformer_block`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_transformer_block`
 
@@ -135,7 +135,7 @@ uv run pytest -k test_transformer_block
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 原理背景：[prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)（Pre-Norm 为何流行）

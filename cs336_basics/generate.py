@@ -18,7 +18,8 @@ import argparse
 import torch
 
 from cs336_basics.bpe import Tokenizer
-from cs336_basics.nn import TransformerLM, load_checkpoint
+from cs336_basics.checkpoint import load_checkpoint
+from cs336_basics.model import TransformerLM
 
 
 def parse_args() -> argparse.Namespace:

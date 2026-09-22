@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里**学习率调度** `get_lr_cosine_schedule` 的实现：为什么训练要动态调整学习率、warmup + 余弦退火三段公式各是什么、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `get_lr_cosine_schedule`
+- 实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py) 的 `get_lr_cosine_schedule`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_get_lr_cosine_schedule`
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py) 的 `test_get_lr_cosine_schedule`
 
@@ -52,7 +52,7 @@ $$ \alpha_t = \alpha_{\min} $$
 
 ## 3. 实现与 adapter
 
-实现直译三段（完整见 [nn.py](../cs336_basics/nn.py)）：
+实现直译三段（完整见 [optimizer.py](../cs336_basics/optimizer.py)）：
 
 ```python
 if it < warmup_iters:
@@ -88,7 +88,7 @@ uv run pytest -k test_get_lr_cosine_schedule
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py)
 - 前置：[learning_rate_tuning_notes.md](./learning_rate_tuning_notes.md)、[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)

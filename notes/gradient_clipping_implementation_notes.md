@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里**梯度裁剪** `gradient_clipping` 的实现：它解决什么问题、为什么按"全局范数"裁剪、公式与实现细节、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `gradient_clipping`
+- 实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py) 的 `gradient_clipping`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_gradient_clipping`
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py) 的 `test_gradient_clipping`
 
@@ -112,7 +112,7 @@ uv run pytest -k test_gradient_clipping
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py)
 - 前置：[learning_rate_tuning_notes.md](./learning_rate_tuning_notes.md)、[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)

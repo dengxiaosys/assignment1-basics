@@ -29,7 +29,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    from cs336_basics.nn import Linear
+    from cs336_basics.model import Linear
 
     linear = Linear(d_in, d_out, device=weights.device, dtype=weights.dtype)
     linear.load_state_dict({"weight": weights})
@@ -55,7 +55,7 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    from cs336_basics.nn import Embedding
+    from cs336_basics.model import Embedding
 
     embedding = Embedding(vocab_size, d_model, device=weights.device, dtype=weights.dtype)
     embedding.load_state_dict({"weight": weights})
@@ -84,7 +84,7 @@ def run_swiglu(
     Returns:
         Float[Tensor, "... d_model"]: Output embeddings of the same shape as the input embeddings.
     """
-    from cs336_basics.nn import SwiGLU
+    from cs336_basics.model import SwiGLU
 
     swiglu = SwiGLU(d_model, d_ff, device=in_features.device, dtype=in_features.dtype)
     swiglu.load_state_dict(
@@ -111,7 +111,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    from cs336_basics.nn import scaled_dot_product_attention
+    from cs336_basics.model import scaled_dot_product_attention
 
     return scaled_dot_product_attention(Q, K, V, mask)
 
@@ -147,7 +147,7 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.nn import MultiHeadSelfAttention
+    from cs336_basics.model import MultiHeadSelfAttention
 
     mha = MultiHeadSelfAttention(d_model, num_heads, device=in_features.device, dtype=in_features.dtype)
     mha.load_state_dict(
@@ -198,7 +198,7 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.nn import MultiHeadSelfAttention, RotaryPositionalEmbedding
+    from cs336_basics.model import MultiHeadSelfAttention, RotaryPositionalEmbedding
 
     mha = MultiHeadSelfAttention(d_model, num_heads, device=in_features.device, dtype=in_features.dtype)
     mha.load_state_dict(
@@ -235,7 +235,7 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    from cs336_basics.nn import RotaryPositionalEmbedding
+    from cs336_basics.model import RotaryPositionalEmbedding
 
     rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len, device=in_query_or_key.device)
     return rope(in_query_or_key, token_positions)
@@ -311,7 +311,7 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    from cs336_basics.nn import TransformerBlock
+    from cs336_basics.model import TransformerBlock
 
     block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta,
                              device=in_features.device, dtype=in_features.dtype)
@@ -398,7 +398,7 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    from cs336_basics.nn import TransformerLM
+    from cs336_basics.model import TransformerLM
 
     lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta,
                        device=in_indices.device)
@@ -426,7 +426,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    from cs336_basics.nn import RMSNorm
+    from cs336_basics.model import RMSNorm
 
     rmsnorm = RMSNorm(d_model, eps=eps, device=weights.device, dtype=weights.dtype)
     rmsnorm.load_state_dict({"weight": weights})
@@ -444,7 +444,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    from cs336_basics.nn import silu
+    from cs336_basics.model import silu
 
     return silu(in_features)
 
@@ -469,7 +469,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    from cs336_basics.nn import get_batch
+    from cs336_basics.data import get_batch
 
     return get_batch(dataset, batch_size, context_length, device)
 
@@ -487,7 +487,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    from cs336_basics.nn import softmax
+    from cs336_basics.nn_utils import softmax
 
     return softmax(in_features, dim)
 
@@ -507,7 +507,7 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    from cs336_basics.nn import cross_entropy
+    from cs336_basics.nn_utils import cross_entropy
 
     return cross_entropy(inputs, targets)
 
@@ -521,7 +521,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    from cs336_basics.nn import gradient_clipping
+    from cs336_basics.optimizer import gradient_clipping
 
     gradient_clipping(parameters, max_l2_norm)
 
@@ -530,7 +530,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    from cs336_basics.nn import AdamW
+    from cs336_basics.optimizer import AdamW
 
     return AdamW
 
@@ -560,7 +560,7 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    from cs336_basics.nn import get_lr_cosine_schedule
+    from cs336_basics.optimizer import get_lr_cosine_schedule
 
     return get_lr_cosine_schedule(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters)
 
@@ -581,7 +581,7 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    from cs336_basics.nn import save_checkpoint
+    from cs336_basics.checkpoint import save_checkpoint
 
     return save_checkpoint(model, optimizer, iteration, out)
 
@@ -604,7 +604,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    from cs336_basics.nn import load_checkpoint
+    from cs336_basics.checkpoint import load_checkpoint
 
     return load_checkpoint(src, model, optimizer)
 

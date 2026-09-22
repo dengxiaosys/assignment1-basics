@@ -7,7 +7,7 @@
 对应实际代码：
 
 - 推理脚本：[cs336_basics/generate.py](../cs336_basics/generate.py)
-- checkpoint 加载：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `load_checkpoint`
+- checkpoint 加载：[cs336_basics/checkpoint.py](../cs336_basics/checkpoint.py) 的 `load_checkpoint`
 - BPE 编解码：[cs336_basics/bpe.py](../cs336_basics/bpe.py) 的 `Tokenizer`
 - 训练入口：[cs336_basics/train.py](../cs336_basics/train.py)
 
@@ -210,6 +210,6 @@ checkpoint -> model weights -> prompt encode -> autoregressive forward -> token 
 ## 参考
 
 - 推理实现：[cs336_basics/generate.py](../cs336_basics/generate.py)
-- checkpoint 实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- checkpoint 实现：[cs336_basics/checkpoint.py](../cs336_basics/checkpoint.py)
 - BPE：[cs336_basics/bpe.py](../cs336_basics/bpe.py)
 - 相关笔记：[checkpointing_implementation_notes.md](./checkpointing_implementation_notes.md)、[tokenizer_implementation_notes.md](./bpe/tokenizer_implementation_notes.md)、[cross_machine_dev_B_to_C_gpu_guide.md](./cross_machine_dev_B_to_C_gpu_guide.md)

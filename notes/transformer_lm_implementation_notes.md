@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里**完整语言模型** `TransformerLM` 的实现思路：它如何把词嵌入、$N$ 个 Transformer block、末端归一化和输出头组装成一个 decoder-only 语言模型、输出的 logits 是什么、adapter 怎么接到测试。这是整个 assignment1 建模部分的**收官**——从此前所有零件到一个能出词表分布的模型。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `TransformerLM`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `TransformerLM`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_transformer_lm`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_transformer_lm`、`test_transformer_lm_truncated_input`
 
@@ -143,7 +143,7 @@ uv run pytest -k test_transformer_lm
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 组件笔记：[transformer_block_implementation_notes.md](./transformer_block_implementation_notes.md)、[embedding_implementation_notes.md](./embedding_implementation_notes.md)、[linear_implementation_notes.md](./linear_implementation_notes.md)

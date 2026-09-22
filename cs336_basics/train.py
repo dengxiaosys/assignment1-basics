@@ -23,16 +23,11 @@ import time
 import numpy as np
 import torch
 
-from cs336_basics.nn import (
-    AdamW,
-    TransformerLM,
-    cross_entropy,
-    get_batch,
-    get_lr_cosine_schedule,
-    gradient_clipping,
-    load_checkpoint,
-    save_checkpoint,
-)
+from cs336_basics.checkpoint import load_checkpoint, save_checkpoint
+from cs336_basics.data import get_batch
+from cs336_basics.model import TransformerLM
+from cs336_basics.nn_utils import cross_entropy
+from cs336_basics.optimizer import AdamW, get_lr_cosine_schedule, gradient_clipping
 
 
 def parse_args() -> argparse.Namespace:

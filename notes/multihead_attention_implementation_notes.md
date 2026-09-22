@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **多头自注意力（MHA）** 的实现思路：为什么要"多头"、QKV 如何用单次大矩阵投影再拆头、因果掩码怎么加、adapter 怎么接到测试。这是 Transformer block 的两大子层之一（另一个是 SwiGLU FFN）。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `MultiHeadSelfAttention`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `MultiHeadSelfAttention`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_multihead_self_attention`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_multihead_self_attention`
 
@@ -225,7 +225,7 @@ uv run pytest -k "test_multihead_self_attention and not rope"
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 依赖：[attention_implementation_notes.md](./attention_implementation_notes.md)（SDPA）、[linear_implementation_notes.md](./linear_implementation_notes.md)、[softmax_implementation_notes.md](./softmax_implementation_notes.md)

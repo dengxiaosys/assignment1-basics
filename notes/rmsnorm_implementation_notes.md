@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 `RMSNorm` 的实现思路，重点讲**它算什么、为什么要在 float32 上算、weight 是什么**。结构与 [linear_implementation_notes.md](./linear_implementation_notes.md)、[embedding_implementation_notes.md](./embedding_implementation_notes.md) 一致。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `RMSNorm`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `RMSNorm`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_rmsnorm`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_rmsnorm`
 
@@ -113,7 +113,7 @@ uv run pytest -k test_rmsnorm
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 原理背景：[prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)（RMSNorm 与 LayerNorm、$g_i$ 独立性）

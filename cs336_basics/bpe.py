@@ -15,7 +15,8 @@
 import os
 import regex as re
 from collections import Counter, defaultdict
-from typing import BinaryIO, Iterable, Iterator
+from collections.abc import Iterable, Iterator
+from typing import BinaryIO
 
 # GPT-2 预分词正则（取自 tiktoken#234），需要 `regex` 包支持 \p{L}\p{N}。
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""

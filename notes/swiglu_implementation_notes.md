@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **SwiGLU** 前馈层（及其依赖的 **SiLU**）的实现思路：它算什么、三个权重矩阵各是什么角色、怎么用已实现的 `Linear` 拼出来、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `silu` 与 `SwiGLU`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `silu` 与 `SwiGLU`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_silu`、`run_swiglu`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_silu_matches_pytorch`、`test_swiglu`
 
@@ -161,7 +161,7 @@ uv run pytest -k "test_swiglu or test_silu"
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 原理背景：[glu_explained.md](./glu_explained.md)（GLU/SwiGLU 门控原理、FFN 位置、2/3 缩放）

@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 `Embedding` 层的实现思路——讲清楚**每个决定为什么这么做**：它本质是什么、weight 形状怎么定、`forward` 为何只是"按行索引"、adapter 怎么接到测试。结构与配套的 [linear_implementation_notes.md](./linear_implementation_notes.md) 保持一致。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `Embedding`
+- 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `Embedding`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_embedding`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_embedding`
 
@@ -108,7 +108,7 @@ uv run pytest -k test_embedding
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
 - 配套：[linear_implementation_notes.md](./linear_implementation_notes.md)、[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)

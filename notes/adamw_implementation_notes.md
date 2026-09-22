@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里 **AdamW** 优化器的实现思路：它在 SGD 之上加了什么、为什么用一阶/二阶矩估计、什么是"偏差校正"、AdamW 相比 Adam 的关键改动（**解耦权重衰减**）是什么、adapter 怎么接到测试。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `AdamW`
+- 实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py) 的 `AdamW`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `get_adamw_cls`
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py) 的 `test_adamw`
 
@@ -158,7 +158,7 @@ $m,v$ 初始化为 0，前几步会**偏向 0**（还没积累够历史）。第
 
 ## 3. 实现映射（代码怎么对应算法）
 
-关键片段（完整见 [nn.py](../cs336_basics/nn.py)）：
+关键片段（完整见 [optimizer.py](../cs336_basics/optimizer.py)）：
 
 ```python
 m.mul_(beta1).add_(grad, alpha=1 - beta1)          # m ← β1 m + (1-β1) g
@@ -204,7 +204,7 @@ uv run pytest -k test_adamw
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py)
 - 前置：[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)、[learning_rate_tuning_notes.md](./learning_rate_tuning_notes.md)

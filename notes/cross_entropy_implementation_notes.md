@@ -5,7 +5,7 @@
 记录 CS336 assignment1 里**交叉熵损失** `cross_entropy` 的实现思路：它算什么、为什么等价于"负对数似然"、为什么必须用 log-sum-exp 做数值稳定、adapter 怎么接到测试。这是从"模型输出 logits"迈向"能训练"的第一步——有了损失才能反向传播。
 
 对应实际代码：
-- 实现：[cs336_basics/nn.py](../cs336_basics/nn.py) 的 `cross_entropy`
+- 实现：[cs336_basics/nn_utils.py](../cs336_basics/nn_utils.py) 的 `cross_entropy`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_cross_entropy`
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py) 的 `test_cross_entropy`
 
@@ -140,7 +140,7 @@ $$ \mathrm{perplexity} = \exp\!\left(\frac{1}{m}\sum_{i=1}^{m}\ell_i\right) $$
 
 ## 参考
 
-- 本仓库实现：[cs336_basics/nn.py](../cs336_basics/nn.py)
+- 本仓库实现：[cs336_basics/nn_utils.py](../cs336_basics/nn_utils.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py)
 - 依赖：[softmax_implementation_notes.md](./softmax_implementation_notes.md)（同款 log-sum-exp 稳定）、[transformer_lm_implementation_notes.md](./transformer_lm_implementation_notes.md)（logits 来源）
