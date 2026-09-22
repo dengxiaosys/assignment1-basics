@@ -158,9 +158,30 @@ python-preference = "managed"
 
 ---
 
-## 8. 工具配置：pytest 与 ruff
+## 8. `[[tool.uv.index]]`：使用中国大陆 PyPI 镜像
 
-### 8.1 `[tool.pytest.ini_options]`：测试运行选项
+```toml
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
+```
+
+| 键 | 作用 |
+|---|---|
+| `name = "aliyun"` | 给这个包索引一个项目内名称，便于 uv 在日志和配置中识别。 |
+| `url` | 阿里云 PyPI 镜像的 Simple API 地址，在中国大陆通常比直接访问官方 PyPI 更快、更稳定。 |
+| `default = true` | 将该索引设为默认来源；未显式绑定其它索引的依赖均从这里解析。 |
+
+使用双中括号是因为 `tool.uv.index` 是一个**索引数组**：项目可以声明多个 `[[tool.uv.index]]`。这里只有一个默认镜像。
+
+镜像配置应写在 `pyproject.toml`，而不是直接修改 `uv.lock`。执行 `uv lock --refresh` 后，lock 中的 `registry`、wheel 和 sdist URL 会按该配置重建；否则手工修改 lock 会在下次解析时被覆盖。当前 lock 已验证全部指向 `mirrors.aliyun.com`。
+
+---
+
+## 9. 工具配置：pytest 与 ruff
+
+### 9.1 `[tool.pytest.ini_options]`：测试运行选项
 
 ```toml
 [tool.pytest.ini_options]
@@ -175,7 +196,7 @@ addopts = "-s"
 | `log_cli_level = "WARNING"` | 控制台日志级别阈值：只显示 WARNING 及以上，过滤掉 INFO/DEBUG 噪声。 |
 | `addopts = "-s"` | 每次 `pytest` 默认追加的参数。`-s` = 不捕获 stdout，**让 `print` 直接显示**（调试时能看到打印）。 |
 
-### 8.2 `[tool.ruff]` 及其子表：代码风格
+### 9.2 `[tool.ruff]` 及其子表：代码风格
 
 ```toml
 [tool.ruff]
@@ -200,7 +221,7 @@ ignore = ["F722"]
 
 ---
 
-## 9. 小结：谁读哪一段
+## 10. 小结：谁读哪一段
 
 | 表 | 谁读 | 管什么 |
 |---|---|---|
@@ -209,6 +230,7 @@ ignore = ["F722"]
 | `[project.scripts]` | 构建后端 | 生成命令行入口 `cs336-train` |
 | `[tool.uv.build-backend]` | uv 构建后端 | 包名与包根目录（本项目非 src-layout） |
 | `[tool.uv]` | uv | 当作包处理、用托管 Python |
+| `[[tool.uv.index]]` | uv | 配置阿里云为默认 Python 包索引 |
 | `[tool.pytest.ini_options]` | pytest | 日志与默认参数 |
 | `[tool.ruff]` / `[tool.ruff.lint.*]` | ruff | 行宽、规则启用/忽略、按文件豁免 |
 

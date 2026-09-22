@@ -148,3 +148,66 @@ done
 - **方案一（推荐）**：A 建反向隧道把 B 的 SSH 送到 C → C 用 sshfs 挂载 B 的代码目录 → **B 改完即生效，C 直接用 GPU 跑，零显式同步**。
 - **铁律**：**代码来自 B，数据/checkpoint/Python 环境在 C 本地**（`.venv` 绝不跨机共享）。
 - **备选**：A 上 rsync 中转（手动/定时）、A 做中转 git（有版本管理）。
+
+
+
+## 6. 实际主机定义
+
+以下别名配置位于 A（Mac）的 `~/.ssh/config`。
+
+### 6.1 B：开发机 `online1`
+
+```sshconfig
+Host online1
+    HostName 10.37.102.220
+    User dengxiao.cs
+    Port 16101
+    GSSAPIAuthentication yes
+    GSSAPIDelegateCredentials no
+```
+
+### 6.2 C：GPU 机 `cuda`
+
+```sshconfig
+Host cuda
+    HostName 192.168.71.6
+    User dengxiao
+```
+
+---
+
+## 7. 从 B 操作 C：由 A 提供反向 SSH 隧道
+
+这是一套方案：A 建立反向隧道，使 B 通过 A 连接 C。
+
+### 7.1 在 A 上建立隧道
+
+```bash
+ssh -fN -R 2222:192.168.71.6:22 online1
+```
+
+### 7.2 在 B 上连接 C
+
+```bash
+ssh -p 2222 dengxiao@localhost
+```
+
+### 7.3 可选：在 B 上配置 SSH 别名
+
+将以下内容加入 B 的 `~/.ssh/config`：
+
+```sshconfig
+Host cuda-via-a
+    HostName localhost
+    Port 2222
+    User dengxiao
+```
+
+以后可简写为：
+
+```bash
+ssh cuda-via-a
+```
+
+别名只是简化命令，不是另一套方案。隧道在 A 断网、休眠或重启后需要
+重新建立。
