@@ -386,13 +386,14 @@ def save_checkpoint(model, optimizer, iteration, out):
     torch.save(checkpoint, out)
 
 
-def load_checkpoint(src, model, optimizer):
-    """从 src 反序列化 checkpoint，就地恢复 model 与 optimizer，并返回保存时的迭代数。
+def load_checkpoint(src, model, optimizer=None, map_location=None):
+    """从 src 反序列化 checkpoint，就地恢复 model，按需恢复 optimizer，并返回迭代数。
 
-    与 save_checkpoint 对称：torch.load 读回 dict，再用 load_state_dict 把权重和
-    优化器状态灌回传入的对象（就地修改，不新建），最后返回 iteration。
+    训练续训时传入 optimizer，恢复参数、动量/二阶矩和 iteration；推理时传 optimizer=None，
+    只加载模型权重，避免无意义地恢复优化器状态。map_location 支持跨设备加载 checkpoint。
     """
-    checkpoint = torch.load(src)
+    checkpoint = torch.load(src, map_location=map_location, weights_only=True)
     model.load_state_dict(checkpoint["model"])
-    optimizer.load_state_dict(checkpoint["optimizer"])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
     return checkpoint["iteration"]

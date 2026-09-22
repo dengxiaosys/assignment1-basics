@@ -27,6 +27,7 @@ build-backend = "uv_build"
 
 [project.scripts]
 cs336-train = "cs336_basics.train:main"
+cs336-generate = "cs336_basics.generate:main"
 
 [tool.uv.build-backend]
 module-name = "cs336_basics"
