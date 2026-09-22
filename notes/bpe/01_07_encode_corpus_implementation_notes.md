@@ -2,14 +2,14 @@
 
 ## 0. 本文目标
 
-记录打通"文本 → 训练"链路的**最后一环**：用训练好的 BPE 把原始文本语料编码成**一维 token-id 数组并存盘（.npy）**，供 [训练脚本](../training_loop_implementation_notes.md) 的 `load_tokens` 加载。这一步之前是缺口——[train.py](../../cs336_basics/train.py) 要的是 token 数组，而磁盘上只有 `.txt`。
+记录打通"文本 → 训练"链路的**最后一环**：用训练好的 BPE 把原始文本语料编码成**一维 token-id 数组并存盘（.npy）**，供 [训练脚本](../03_10_training_loop_implementation_notes.md) 的 `load_tokens` 加载。这一步之前是缺口——[train.py](../../cs336_basics/train.py) 要的是 token 数组，而磁盘上只有 `.txt`。
 
 对应实际代码：
 - 脚本：[cs336_basics/encode_corpus.py](../../cs336_basics/encode_corpus.py)
 - 依赖：[Tokenizer](../../cs336_basics/bpe.py)（`from_files` + `encode_iterable`）、上游产物 `bpe_out/tinystories/{vocab.json,merges.txt}`
 - 下游：[train.py](../../cs336_basics/train.py) 的 `load_tokens` / `get_batch`
 
-前置：[Tokenizer 实现](./tokenizer_implementation_notes.md)、[BPE 训练实验](./train_bpe_tinystories_experiment_notes.md)、[数据加载](../data_loading_implementation_notes.md)。
+前置：[Tokenizer 实现](./01_06_tokenizer_implementation_notes.md)、[BPE 训练实验](./01_05_train_bpe_tinystories_experiment_notes.md)、[数据加载](../03_08_data_loading_implementation_notes.md)。
 
 ---
 
@@ -21,7 +21,7 @@
 .txt 语料 ──[本步: encode_corpus]──> token .npy ──> load_tokens(memmap) ──> get_batch ──> train.py
 ```
 
-- 训练时模型吃的是**整数 token id**，不是文本。所以必须先把语料**一次性编码**成 id 序列存盘，训练时再随机采样（见 [数据加载笔记](../data_loading_implementation_notes.md)）。
+- 训练时模型吃的是**整数 token id**，不是文本。所以必须先把语料**一次性编码**成 id 序列存盘，训练时再随机采样（见 [数据加载笔记](../03_08_data_loading_implementation_notes.md)）。
 - 为什么**预先编码到磁盘**、而不是训练时现编：BPE 编码不便宜（正则预分词 + 逐预 token 合并），若每步现编会拖慢训练；预生成一次、之后训练多轮反复读，摊销掉编码成本。这也是 nanoGPT 等实现的通用做法。
 
 ---
@@ -38,7 +38,7 @@ with open(input_path, encoding="utf-8") as f:
         ids.append(token_id)
 ```
 
-- 用 `encode_iterable`（见 [Tokenizer 笔记](./tokenizer_implementation_notes.md) §5）**逐行**编码，避免把 2.1 GB 文本一次性读进内存。
+- 用 `encode_iterable`（见 [Tokenizer 笔记](./01_06_tokenizer_implementation_notes.md) §5）**逐行**编码，避免把 2.1 GB 文本一次性读进内存。
 - 注意：产出的 `ids` 列表本身会驻留内存（最终要存成一个数组）。TinyStories train 约 5 亿 token 量级，`list[int]` 占内存不小，但本机内存充足；若语料再大到装不下，可改成**分块写入**（`np.memmap` 边编边写），本步未做这层优化。
 
 ### 2.2 存成 `uint16` 的 .npy
@@ -49,11 +49,11 @@ np.save(output_path, arr)
 ```
 
 - **为什么 `uint16`**：TinyStories 词表 10000 < 65536，一个 token id 用 **2 字节**足够。相比 `int64`（8 字节）省 **4 倍**磁盘和内存带宽。若词表 ≥ 65536 需改用 `uint32`。
-- **为什么 `.npy`**：自带 dtype/shape 头，`load_tokens` 用 `np.load(mmap_mode="r")` 可**内存映射**读取——训练时按需从磁盘取用到的片段，不必全量载入（见 [数据加载笔记](../data_loading_implementation_notes.md) §2.4）。与 train.py 的数据约定一致。
+- **为什么 `.npy`**：自带 dtype/shape 头，`load_tokens` 用 `np.load(mmap_mode="r")` 可**内存映射**读取——训练时按需从磁盘取用到的片段，不必全量载入（见 [数据加载笔记](../03_08_data_loading_implementation_notes.md) §2.4）。与 train.py 的数据约定一致。
 
 ### 2.3 顺带报告压缩率与吞吐
 
-脚本打印 `compression_ratio = 原始字节数 / token 数`（bytes/token）和 `throughput = 字节/秒`——正好是 `tokenizer_experiments` 那道题要的指标（见 [非编码问题](./bpe_conceptual_questions_notes.md) §6），编码时免费得到。
+脚本打印 `compression_ratio = 原始字节数 / token 数`（bytes/token）和 `throughput = 字节/秒`——正好是 `tokenizer_experiments` 那道题要的指标（见 [非编码问题](./01_03_bpe_conceptual_questions_notes.md) §6），编码时免费得到。
 
 ---
 
@@ -73,7 +73,7 @@ uv run python -m cs336_basics.encode_corpus \
 
 **valid 实测**：22.5 MB → **5,461,210 个 token**，耗时 24 s，**压缩率 4.12 bytes/token**，吞吐 ≈935 KB/s。压缩率 ~4 与预期一致（GPT-2 系分词器常见 3–5）。
 
-> train（2.1 GB）单进程流式编码约需几十分钟（吞吐 ~0.9 MB/s）。这是一次性成本，产物 `ts_train.npy` 之后训练反复复用。若嫌慢，可按 [Tokenizer 笔记](./tokenizer_implementation_notes.md) §7.4 的思路做**分块 + 多进程**并行编码（按文档边界切，各块编码后拼接）——本步为简单起见用单进程流式。
+> train（2.1 GB）单进程流式编码约需几十分钟（吞吐 ~0.9 MB/s）。这是一次性成本，产物 `ts_train.npy` 之后训练反复复用。若嫌慢，可按 [Tokenizer 笔记](./01_06_tokenizer_implementation_notes.md) §7.4 的思路做**分块 + 多进程**并行编码（按文档边界切，各块编码后拼接）——本步为简单起见用单进程流式。
 
 ---
 
@@ -111,6 +111,6 @@ uv run python -m cs336_basics.encode_corpus \
 ## 参考
 
 - 脚本：[cs336_basics/encode_corpus.py](../../cs336_basics/encode_corpus.py)
-- 依赖：[Tokenizer](../../cs336_basics/bpe.py)、[BPE 训练实验](./train_bpe_tinystories_experiment_notes.md)（产物来源）
-- 下游：[train.py](../../cs336_basics/train.py)、[训练脚本笔记](../training_loop_implementation_notes.md)、[数据加载笔记](../data_loading_implementation_notes.md)
-- 相关：[Tokenizer 实现](./tokenizer_implementation_notes.md)（encode_iterable、复杂度/并行）、[非编码问题](./bpe_conceptual_questions_notes.md)（压缩率）
+- 依赖：[Tokenizer](../../cs336_basics/bpe.py)、[BPE 训练实验](./01_05_train_bpe_tinystories_experiment_notes.md)（产物来源）
+- 下游：[train.py](../../cs336_basics/train.py)、[训练脚本笔记](../03_10_training_loop_implementation_notes.md)、[数据加载笔记](../03_08_data_loading_implementation_notes.md)
+- 相关：[Tokenizer 实现](./01_06_tokenizer_implementation_notes.md)（encode_iterable、复杂度/并行）、[非编码问题](./01_03_bpe_conceptual_questions_notes.md)（压缩率）

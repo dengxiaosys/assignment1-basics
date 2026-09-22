@@ -4,7 +4,7 @@
 
 回答 CS336 assignment1 的 `adamw_accounting` 问题：用 AdamW 训练一个 Transformer LM 需要多少**显存**（参数/激活/梯度/优化器状态四块）、一步多少 **FLOPs**、以及在单张 H100 上训练 GPT-2 XL 要多久。并把训练显存构成、fwd/bwd 计算比、MFU 等背景讲清。
 
-对应 handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md) 的 `Problem (adamw_accounting)`。前置：[FLOPs 核算笔记](./transformer_resource_accounting_notes.md)（矩阵乘 $2mnp$、前向 FLOPs 公式）、[AdamW 笔记](./adamw_implementation_notes.md)（优化器状态 $m,v$）。
+对应 handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md) 的 `Problem (adamw_accounting)`。前置：[FLOPs 核算笔记](./02_15_transformer_resource_accounting_notes.md)（矩阵乘 $2mnp$、前向 FLOPs 公式）、[AdamW 笔记](./03_04_adamw_implementation_notes.md)（优化器状态 $m,v$）。
 
 > 说明：分析题。数值按脚本精确计算，`float32`（4 字节/元素），$d_{ff}=\frac{8}{3}d_{model}$（本题不取 64 倍数）。
 
@@ -18,7 +18,7 @@
 |---|---|---|
 | **参数（Parameters）** | 模型权重 $\theta$ | $P$ |
 | **梯度（Gradients）** | 每个参数一个 $\partial L/\partial\theta$ | $P$（与参数一一对应） |
-| **优化器状态（Optimizer state）** | AdamW 的一阶矩 $m$ + 二阶矩 $v$ | $2P$（每参数两个，见 [AdamW 笔记](./adamw_implementation_notes.md)） |
+| **优化器状态（Optimizer state）** | AdamW 的一阶矩 $m$ + 二阶矩 $v$ | $2P$（每参数两个，见 [AdamW 笔记](./03_04_adamw_implementation_notes.md)） |
 | **激活（Activations）** | 前向各层的中间结果，反向要用 | 正比于 `batch_size × 各层输出规模` |
 
 前三块都**只依赖参数量 $P$**（$1+1+2=4$ 倍 $P$），与 batch 无关；**只有激活随 batch 线性增长**。这是理解"最大 batch"的关键。
@@ -44,7 +44,7 @@ $$ P = \underbrace{Vd}_{\text{嵌入}} + L\underbrace{(4d^2 + 3d\,d_{ff} + 2d)}_
 
 $$ \underbrace{2sd}_{\text{2×RMSNorm}} + \underbrace{3sd}_{\text{QKV投影}} + \underbrace{2Hs^2}_{QK^\top+\text{softmax}} + \underbrace{sd}_{\text{加权和}} + \underbrace{sd}_{\text{输出投影}} + \underbrace{4s\,d_{ff}}_{W_1,W_3,\text{SiLU},\text{逐元素积}} + \underbrace{sd}_{W_2} $$
 
-> **FFN（SwiGLU）的激活到底算了哪些？门×值的乘积算了吗？** 算了——它就是上式 $4s\,d_{ff}$ 里的"逐元素积"那一项。把 SwiGLU 的五个组件拆开看（回顾 [SwiGLU 笔记](./swiglu_implementation_notes.md)：$\mathrm{FFN}(x)=W_2(\mathrm{SiLU}(W_1x)\odot W_3x)$）：
+> **FFN（SwiGLU）的激活到底算了哪些？门×值的乘积算了吗？** 算了——它就是上式 $4s\,d_{ff}$ 里的"逐元素积"那一项。把 SwiGLU 的五个组件拆开看（回顾 [SwiGLU 笔记](./02_06_swiglu_implementation_notes.md)：$\mathrm{FFN}(x)=W_2(\mathrm{SiLU}(W_1x)\odot W_3x)$）：
 >
 > | FFN 组件 | 输出形状 | 激活元素数 |
 > |---|---|---|
@@ -96,7 +96,7 @@ $$ \boxed{\text{Memory} \approx 15.23\,B + 24.37\ \text{GiB}} $$
 
 一步 = 前向 + 反向 + 优化器更新，逐项分开列：
 
-- **前向（每序列）**：矩阵乘为主（见 [FLOPs 笔记](./transformer_resource_accounting_notes.md)），
+- **前向（每序列）**：矩阵乘为主（见 [FLOPs 笔记](./02_15_transformer_resource_accounting_notes.md)），
   $$ \text{fwd} = L(8sd^2 + 4s^2d + 6s\,d_{ff}\,d) + 2sdV $$
   GPT-2 XL 约 **3.51 TFLOPs/序列**。
 - **反向（每序列）**：约为前向的 **2 倍**（Kaplan/Hoffmann 惯例，理由见 §6），单独就是
@@ -140,10 +140,10 @@ $$ \boxed{\approx 4836\ \text{小时} \approx 202\ \text{天} \approx 0.55\ \tex
 
 ## 6. 背景补充：几个关键概念
 
-- **为什么优化器状态是 $2P$**：AdamW 每个参数要存一阶矩 $m$ 和二阶矩 $v$（见 [AdamW 笔记](./adamw_implementation_notes.md)）。所以 Adam 类训练的固定显存是 $4P$（params+grads+$m$+$v$），比 SGD（无状态，$2P$）翻倍——这是自适应优化器的显存代价。
+- **为什么优化器状态是 $2P$**：AdamW 每个参数要存一阶矩 $m$ 和二阶矩 $v$（见 [AdamW 笔记](./03_04_adamw_implementation_notes.md)）。所以 Adam 类训练的固定显存是 $4P$（params+grads+$m$+$v$），比 SGD（无状态，$2P$）翻倍——这是自适应优化器的显存代价。
 - **为什么 bwd ≈ 2×fwd**：反向要对每个矩阵乘算"对输入的梯度"和"对权重的梯度"两个矩阵乘，各约等于一次前向 matmul，故约 2 倍（Kaplan 2020、Hoffmann 2022 的通用近似）。合计一步约 3×fwd。
 - **MFU（Model FLOPs Utilization）**：实测吞吐 / 硬件理论峰值。50% 已是相当好的工程水平——受访存带宽、通信、kernel 效率等限制，很难跑满峰值。核算训练时间必须乘上 MFU，否则会严重低估。
-- **激活显存为何常是瓶颈**：它 $\propto B\times L\times(sd + s^2H)$，长上下文时 $s^2$ 项还会爆炸（见 [FLOPs 笔记](./transformer_resource_accounting_notes.md) 的长上下文分析）。这催生了梯度检查点、FlashAttention（不显式存 $s\times s$ 注意力矩阵）等技术。
+- **激活显存为何常是瓶颈**：它 $\propto B\times L\times(sd + s^2H)$，长上下文时 $s^2$ 项还会爆炸（见 [FLOPs 笔记](./02_15_transformer_resource_accounting_notes.md) 的长上下文分析）。这催生了梯度检查点、FlashAttention（不显式存 $s\times s$ 注意力矩阵）等技术。
 
 ---
 
@@ -160,6 +160,6 @@ $$ \boxed{\approx 4836\ \text{小时} \approx 202\ \text{天} \approx 0.55\ \tex
 
 ## 参考
 
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（adamw_accounting）
-- 前置：[transformer_resource_accounting_notes.md](./transformer_resource_accounting_notes.md)（FLOPs 核算）、[adamw_implementation_notes.md](./adamw_implementation_notes.md)（优化器状态）
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（adamw_accounting）
+- 前置：[02_15_transformer_resource_accounting_notes.md](./02_15_transformer_resource_accounting_notes.md)（FLOPs 核算）、[03_04_adamw_implementation_notes.md](./03_04_adamw_implementation_notes.md)（优化器状态）
 - 文献：Kaplan et al. 2020、Hoffmann et al. 2022（fwd/bwd 比例、scaling）；Chowdhery et al. 2022（MFU）。

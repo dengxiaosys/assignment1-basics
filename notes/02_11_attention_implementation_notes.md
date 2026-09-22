@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_scaled_dot_product_attention`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_scaled_dot_product_attention`、`test_4d_scaled_dot_product_attention`
 
-依赖前置：[softmax 笔记](./softmax_implementation_notes.md)（本函数直接调用它）。
+依赖前置：[softmax 笔记](./02_10_softmax_implementation_notes.md)（本函数直接调用它）。
 
 ---
 
@@ -56,7 +56,7 @@ $$ \mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}
 scores = Q @ K.transpose(-2, -1) / math.sqrt(d_k)
 ```
 
-`K.transpose(-2, -1)` 只换最后两维（`keys` 与 `d_k`），使 `(..., keys, d_k)` 变 `(..., d_k, keys)`，与 `Q` 相乘得 `(..., queries, keys)`；用 `transpose(-2,-1)` 而非 `.T` 是为了对任意前置批量维安全（同 [linear 笔记](./linear_implementation_notes.md) 的转置讨论）。
+`K.transpose(-2, -1)` 只换最后两维（`keys` 与 `d_k`），使 `(..., keys, d_k)` 变 `(..., d_k, keys)`，与 `Q` 相乘得 `(..., queries, keys)`；用 `transpose(-2,-1)` 而非 `.T` 是为了对任意前置批量维安全（同 [linear 笔记](./02_02_linear_implementation_notes.md) 的转置讨论）。
 
 ### 2.3 布尔 mask：True 保留、False 屏蔽
 
@@ -75,7 +75,7 @@ if mask is not None:
 
 ### 2.4 复用 softmax、是否手写 backward
 
-- **复用**：直接调 [2.2 节的 `softmax`](./softmax_implementation_notes.md)（沿 `dim=-1`，即 key 维），它自带减最大值的数值稳定；
+- **复用**：直接调 [2.2 节的 `softmax`](./02_10_softmax_implementation_notes.md)（沿 `dim=-1`，即 key 维），它自带减最大值的数值稳定；
 - **backward**：矩阵乘、缩放、`masked_fill`、softmax 全是可微算子，autograd 自动求导，无需手写。无可学习参数。
 
 ---
@@ -126,6 +126,6 @@ uv run pytest -k scaled_dot_product
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 依赖：[softmax_implementation_notes.md](./softmax_implementation_notes.md)
-- 相关：[rope_explained.md](./rope_explained.md)（RoPE 在注意力打分前作用于 Q/K）、[linear_implementation_notes.md](./linear_implementation_notes.md)（转置的维度安全）
+- 依赖：[02_10_softmax_implementation_notes.md](./02_10_softmax_implementation_notes.md)
+- 相关：[02_08_rope_explained.md](./02_08_rope_explained.md)（RoPE 在注意力打分前作用于 Q/K）、[02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)（转置的维度安全）
 - 原始文献：Vaswani et al., *Attention Is All You Need*, 2017。

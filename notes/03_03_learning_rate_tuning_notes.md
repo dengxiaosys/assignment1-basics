@@ -4,8 +4,8 @@
 
 回答 CS336 assignment1 的 `learning_rate_tuning` 问题：在 handout 的 SGD toy example 上，用学习率 `1e1`、`1e2`、`1e3` 各跑 10 步，loss 会怎样——更快降、更慢降、还是发散？并把背后的原理（为什么会发散、什么是临界学习率）讲清楚。
 
-对应 handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md) 的 `Problem (learning_rate_tuning)`。
-前置背景：[优化器 API 笔记](./pytorch_optimizer_api_notes.md)（什么是一次 optimizer step、损失地形下山）。
+对应 handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md) 的 `Problem (learning_rate_tuning)`。
+前置背景：[优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md)（什么是一次 optimizer step、损失地形下山）。
 
 > 说明：这是分析/观察题。下面的数值是我用 handout 的 SGD 类和 toy 循环**实际跑出来的**（`torch.manual_seed(0)`，损失 `loss = (weights**2).mean()`）。
 
@@ -61,7 +61,7 @@ $$ \theta \leftarrow \theta - \alpha \cdot \frac{2}{n}\theta = \left(1 - \frac{2
 
 ## 3. 思维范式：学习率就是"下山的步子大小"
 
-回到 [优化器笔记](./pytorch_optimizer_api_notes.md) 的"损失地形下山"图景。学习率 $\alpha$ 控制**每一步迈多大**：
+回到 [优化器笔记](./03_02_pytorch_optimizer_api_notes.md) 的"损失地形下山"图景。学习率 $\alpha$ 控制**每一步迈多大**：
 
 - **太小**：方向对，但步子太碎，要走很多步才到谷底——浪费算力（`1e0` 就是）；
 - **适中**：步子恰好，几步就滑到谷底（`1e2`）；
@@ -93,6 +93,6 @@ $$ \theta \leftarrow \theta - \alpha \cdot \frac{2}{n}\theta = \left(1 - \frac{2
 
 ## 参考
 
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（learning_rate_tuning、4.2 SGD）
-- 前置：[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)（optimizer step、损失地形）
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（learning_rate_tuning、4.2 SGD）
+- 前置：[03_02_pytorch_optimizer_api_notes.md](./03_02_pytorch_optimizer_api_notes.md)（optimizer step、损失地形）
 - 后续：LR schedule（warmup + cosine 衰减）、AdamW 实现

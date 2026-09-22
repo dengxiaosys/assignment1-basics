@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../../tests/adapters.py) 的 `run_train_bpe`
 - 测试：[tests/test_train_bpe.py](../../tests/test_train_bpe.py)（`test_train_bpe` 正确性、`test_train_bpe_speed` 速度、`test_train_bpe_special_tokens`）
 
-前置：[BPE 分词器原理](./bpe_tokenizer.md)、[手工复算例子](./byte_level_bpe_worked_example.md)、[非编码问题详解](./bpe_conceptual_questions_notes.md)。
+前置：[BPE 分词器原理](./01_01_bpe_tokenizer.md)、[手工复算例子](./01_02_byte_level_bpe_worked_example.md)、[非编码问题详解](./01_03_bpe_conceptual_questions_notes.md)。
 
 ---
 
@@ -20,7 +20,7 @@ BPE（Byte-Pair Encoding）训练的产物是两样东西：
 - **`vocab: dict[int, bytes]`**：token id → token 字节串。初始是 256 个单字节 + special tokens，训练中不断加入"合并出的新 token"。
 - **`merges: list[tuple[bytes, bytes]]`**：**有序**的合并规则列表，每条 `(A, B)` 表示"把相邻的 A、B 合成 AB"。顺序即创建顺序——**编码时要按这个顺序复现合并**（见后续 Tokenizer）。
 
-训练的本质：**在语料上反复找"最高频的相邻字节对"，把它合并成一个新 token**，从而把高频字符串（如 `the`）压成单个 token。合并越多，词表越大、序列越短——这正是子词分词"用词表换序列长度"的核心（见 [BPE 原理](./bpe_tokenizer.md)）。
+训练的本质：**在语料上反复找"最高频的相邻字节对"，把它合并成一个新 token**，从而把高频字符串（如 `the`）压成单个 token。合并越多，词表越大、序列越短——这正是子词分词"用词表换序列长度"的核心（见 [BPE 原理](./01_01_bpe_tokenizer.md)）。
 
 ---
 
@@ -34,7 +34,7 @@ for tok in special_tokens:
     vocab[len(vocab)] = tok.encode("utf-8")    # 追加 special tokens
 ```
 
-- **先放 256 个字节**：字节级 BPE 的底座，保证**任何文本都能表示**（无 OOV，见 [非编码问题](./bpe_conceptual_questions_notes.md) §1.2）。
+- **先放 256 个字节**：字节级 BPE 的底座，保证**任何文本都能表示**（无 OOV，见 [非编码问题](./01_03_bpe_conceptual_questions_notes.md) §1.2）。
 - **再放 special tokens**（如 `<|endoftext|>`）：它们有固定 id，**永不被拆分、也不参与合并**。
 - **最终词表大小** = 256 + special 数 + 合并次数。所以合并次数 = `vocab_size - 256 - len(special_tokens)`。
 
@@ -50,7 +50,7 @@ segments = re.split(pattern, text)
 ```
 
 - 用 special tokens 把文本**切开**，special token 本身**不进入**后续统计。
-- 目的：**合并绝不跨越文档边界**。`<|endoftext|>` 分隔不同文档，跨它合并没有语义意义（见 [数据加载笔记](../data_loading_implementation_notes.md) 里"文档边界"的讨论）。这也是 `test_train_bpe_special_tokens` 验证的——训练出的词表里除 special 外不含 `<|` 之类的碎片。
+- 目的：**合并绝不跨越文档边界**。`<|endoftext|>` 分隔不同文档，跨它合并没有语义意义（见 [数据加载笔记](../03_08_data_loading_implementation_notes.md) 里"文档边界"的讨论）。这也是 `test_train_bpe_special_tokens` 验证的——训练出的词表里除 special 外不含 `<|` 之类的碎片。
 
 **第二层：段内用 GPT-2 正则抽预 token。**
 
@@ -62,7 +62,7 @@ for match in re.finditer(PAT, seg):
 ```
 
 - 这个正则来自 GPT-2（tiktoken#234），把文本切成"词 / 空格+词 / 数字 / 标点 / 空白"等**粗粒度片段**，需要 `regex` 包（支持 `\p{L}` 字母类、`\p{N}` 数字类）。
-- **为什么要预分词**：(1) 避免跨词合并出 `dog!`/`dog.` 这种只差标点的怪 token；(2) **大幅提速**——把语料压成"预 token → 频次"表，统计对 `(t,e)` 时直接加该词频次，而非在原文逐处扫描（见 [非编码问题](./bpe_conceptual_questions_notes.md) §4）。
+- **为什么要预分词**：(1) 避免跨词合并出 `dog!`/`dog.` 这种只差标点的怪 token；(2) **大幅提速**——把语料压成"预 token → 频次"表，统计对 `(t,e)` 时直接加该词频次，而非在原文逐处扫描（见 [非编码问题](./01_03_bpe_conceptual_questions_notes.md) §4）。
 - **每个预 token 表示成"单字节 bytes 对象的元组"**，如 `low`→`(b'l', b'o', b'w')`。注意 Python 没有单独的 byte 类型，单个字节也是 `bytes` 对象。
 
 ### 2.3 迭代合并
@@ -121,7 +121,7 @@ for wi in pair_to_words[best_pair]:        # 只遍历受影响的词
 - 效果：整套 3 个测试从"超时"降到 **0.69s（正确性+速度两项）/ 3.73s（含 special snapshot）**，稳过阈值。
 - **正确性不变**：增量更新只是"换一种方式维护同样的 pair 计数"，取 best_pair 的逻辑和结果与全扫版完全一致（`test_train_bpe` 仍逐条匹配参考）。
 
-> 背景：这是 BPE 高效实现的通用套路。更极致的实现（如 Rust/C++）还会用堆/优先队列维护最大频次对；但对本作业的规模，Python + 倒排索引已足够快。handout 也提到大语料训练要靠 `multiprocessing` 并行**预分词**（那才是 GB 级语料的主瓶颈，见 [非编码问题](./bpe_conceptual_questions_notes.md) §4b）。
+> 背景：这是 BPE 高效实现的通用套路。更极致的实现（如 Rust/C++）还会用堆/优先队列维护最大频次对；但对本作业的规模，Python + 倒排索引已足够快。handout 也提到大语料训练要靠 `multiprocessing` 并行**预分词**（那才是 GB 级语料的主瓶颈，见 [非编码问题](./01_03_bpe_conceptual_questions_notes.md) §4b）。
 
 ### 4.1 增量更新的核心循环逐行拆解（带实测例子）
 
@@ -228,7 +228,7 @@ uv run pytest tests/test_train_bpe.py
 4. **速度关键**：**增量更新**——用 `pair_to_words` 倒排索引只更新受影响的词，避免每轮全扫；把 2.7s 降到亚秒级。
 5. **测试三面**：正确性（逐条匹配参考）、速度（<1.5s）、special（不被合并）。
 
-至此 BPE 训练完成。下一步实现 `Tokenizer` 类（encode/decode），它会**加载**这里训练出的 vocab/merges，把文本编码成 token id 序列（供 [训练脚本](../training_loop_implementation_notes.md) 使用）。
+至此 BPE 训练完成。下一步实现 `Tokenizer` 类（encode/decode），它会**加载**这里训练出的 vocab/merges，把文本编码成 token id 序列（供 [训练脚本](../03_10_training_loop_implementation_notes.md) 使用）。
 
 ---
 
@@ -237,6 +237,6 @@ uv run pytest tests/test_train_bpe.py
 - 实现：[cs336_basics/bpe.py](../../cs336_basics/bpe.py)
 - 适配层：[tests/adapters.py](../../tests/adapters.py)
 - 测试：[tests/test_train_bpe.py](../../tests/test_train_bpe.py)
-- 相关笔记：[BPE 原理](./bpe_tokenizer.md)、[手工复算例子](./byte_level_bpe_worked_example.md)、[非编码问题](./bpe_conceptual_questions_notes.md)
-- handout：[cs336_assignment1_basics_extracted.md](../cs336_assignment1_basics_extracted.md) §2.4（`train_bpe`）
+- 相关笔记：[BPE 原理](./01_01_bpe_tokenizer.md)、[手工复算例子](./01_02_byte_level_bpe_worked_example.md)、[非编码问题](./01_03_bpe_conceptual_questions_notes.md)
+- handout：[00_01_cs336_assignment1_basics_extracted.md](../00_01_cs336_assignment1_basics_extracted.md) §2.4（`train_bpe`）
 - GPT-2 预分词正则：`openai/tiktoken#234`

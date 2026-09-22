@@ -2,14 +2,14 @@
 
 ## 0. 本文目标
 
-记录 CS336 assignment1 §2.6 **Tokenizer** 的实现：加载训练好的 vocab/merges 后，怎么把文本 `encode` 成 token id、把 id `decode` 回文本。这是 [BPE 训练](./train_bpe_implementation_notes.md) 的下游——训练学出"词表+合并规则"，Tokenizer 则用它们做实际的编解码，是模型训练/推理的数据入口。
+记录 CS336 assignment1 §2.6 **Tokenizer** 的实现：加载训练好的 vocab/merges 后，怎么把文本 `encode` 成 token id、把 id `decode` 回文本。这是 [BPE 训练](./01_04_train_bpe_implementation_notes.md) 的下游——训练学出"词表+合并规则"，Tokenizer 则用它们做实际的编解码，是模型训练/推理的数据入口。
 
 对应实际代码：
 - 实现：[cs336_basics/bpe.py](../../cs336_basics/bpe.py) 的 `Tokenizer` 类
 - 接线：[tests/adapters.py](../../tests/adapters.py) 的 `get_tokenizer`
 - 测试：[tests/test_tokenizer.py](../../tests/test_tokenizer.py)（24 个，逐字节对拍 tiktoken 的 GPT-2）
 
-前置：[BPE 训练](./train_bpe_implementation_notes.md)（vocab/merges 怎么来）、[BPE 原理](./bpe_tokenizer.md)、[非编码问题](./bpe_conceptual_questions_notes.md)（Unicode/UTF-8）。
+前置：[BPE 训练](./01_04_train_bpe_implementation_notes.md)（vocab/merges 怎么来）、[BPE 原理](./01_01_bpe_tokenizer.md)、[非编码问题](./01_03_bpe_conceptual_questions_notes.md)（Unicode/UTF-8）。
 
 ---
 
@@ -130,7 +130,7 @@ def decode(self, ids):
     return data.decode("utf-8", errors="replace")   # 非法字节 -> U+FFFD
 ```
 
-- **先拼字节再解码**：不能逐 id 单独 decode——一个多字节 UTF-8 字符可能**跨多个 token**（比如 emoji 的几个字节被分到不同 token），必须先把所有字节拼成一个 `bytes` 再整体 `decode`（这正是 [非编码问题](./bpe_conceptual_questions_notes.md) §3b "逐字节 decode 是错的" 的实践对应）。
+- **先拼字节再解码**：不能逐 id 单独 decode——一个多字节 UTF-8 字符可能**跨多个 token**（比如 emoji 的几个字节被分到不同 token），必须先把所有字节拼成一个 `bytes` 再整体 `decode`（这正是 [非编码问题](./01_03_bpe_conceptual_questions_notes.md) §3b "逐字节 decode 是错的" 的实践对应）。
 - **`errors="replace"`**：用户可能传入任意 id 序列，拼出的字节未必是合法 UTF-8；handout 要求此时用官方替换字符 **U+FFFD（�）** 兜底，而非抛异常。
 
 ---
@@ -190,7 +190,7 @@ uv run pytest tests/test_tokenizer.py
 
 **合起来：encode 对长度 $N$ 的文本近似 $O(N)$**（把 $L$ 当常数）。真正的常数瓶颈是预分词的复杂正则，与训练时一致。
 
-> `_apply_merges` 的 $O(L^2)$ 值得说明：它每轮都**重新线性扫描**当前序列找 rank 最小的可合并对（`merge_rank.get`），合并一次序列缩短 1，最多 $L$ 轮，故 $O(L^2)$。因为 $L$ 只是一个词的字节数（通常 < 20），$L^2$ 很小，不构成瓶颈。若要对超长"预 token"提速，可改用**优先队列/双向链表**维护候选对（类似训练里的增量思路，见 [train_bpe 笔记](./train_bpe_implementation_notes.md) §4），把单预 token 降到 $O(L\log L)$——但对自然语言不必要。
+> `_apply_merges` 的 $O(L^2)$ 值得说明：它每轮都**重新线性扫描**当前序列找 rank 最小的可合并对（`merge_rank.get`），合并一次序列缩短 1，最多 $L$ 轮，故 $O(L^2)$。因为 $L$ 只是一个词的字节数（通常 < 20），$L^2$ 很小，不构成瓶颈。若要对超长"预 token"提速，可改用**优先队列/双向链表**维护候选对（类似训练里的增量思路，见 [train_bpe 笔记](./01_04_train_bpe_implementation_notes.md) §4），把单预 token 降到 $O(L\log L)$——但对自然语言不必要。
 
 ### 7.2 decode
 
@@ -206,7 +206,7 @@ uv run pytest tests/test_tokenizer.py
 
 **encode 高度可并行，且并行方式与训练预分词同理**：
 
-- **可并行的维度**：文本可按 **special token / 文档边界切块**（同 [train_bpe 实验笔记](./train_bpe_tinystories_experiment_notes.md) §3 的 `find_chunk_boundaries` 思路），各块**独立** encode 后按顺序拼接 id 即可——因为 encode **不跨预 token 边界**，切块无损。这对"把整个语料一次性编码成 token 数组"（LM 训练前的数据准备）尤其有用，可用 `multiprocessing` 把几 GB 语料的编码从小时级压到分钟级。
+- **可并行的维度**：文本可按 **special token / 文档边界切块**（同 [train_bpe 实验笔记](./01_05_train_bpe_tinystories_experiment_notes.md) §3 的 `find_chunk_boundaries` 思路），各块**独立** encode 后按顺序拼接 id 即可——因为 encode **不跨预 token 边界**，切块无损。这对"把整个语料一次性编码成 token 数组"（LM 训练前的数据准备）尤其有用，可用 `multiprocessing` 把几 GB 语料的编码从小时级压到分钟级。
 - **预 token 之间也天然独立**：`_encode_chunk` 里每个预 token 的合并互不影响，理论上可并行；但单块内预 token 很多、每个又很轻，进程/线程开销通常不划算，**按大块并行**才是实际做法。
 - **不可并行的部分**：**单个预 token 内部的合并是严格有序的**（后面的合并依赖前面的结果，见 §3.2），这一步无法并行——但它只是 $O(L)$ 的小工作，无需并行。
 - **decode 可并行**：可按 id 分段各自查表拼字节，最后拼接再解码；但要小心**不能在多字节 UTF-8 字符中间切分**，否则各段 `decode` 会产生 U+FFFD。稳妥做法是仅并行"id→字节"的查表，最后统一 `decode`。实践中 decode 很少是瓶颈，一般不并行。
@@ -225,7 +225,7 @@ uv run pytest tests/test_tokenizer.py
 5. **encode_iterable**：逐块 `yield`，常量内存处理超大文件（1MB 限制过 5MB 文件）。
 6. **验证**：24 个测试逐 id 对拍 tiktoken GPT-2，含 round-trip、special、流式内存三类，全通过。
 
-至此 §2 BPE 全部完成（训练 + 编解码）。配合前面的 [训练脚本](../training_loop_implementation_notes.md)，就能"文本 →（BPE）→ token 数组 →（get_batch）→ 训练 LM"跑通全链路。
+至此 §2 BPE 全部完成（训练 + 编解码）。配合前面的 [训练脚本](../03_10_training_loop_implementation_notes.md)，就能"文本 →（BPE）→ token 数组 →（get_batch）→ 训练 LM"跑通全链路。
 
 ---
 
@@ -234,5 +234,5 @@ uv run pytest tests/test_tokenizer.py
 - 实现：[cs336_basics/bpe.py](../../cs336_basics/bpe.py)（`Tokenizer`）
 - 适配层：[tests/adapters.py](../../tests/adapters.py)（`get_tokenizer`）
 - 测试：[tests/test_tokenizer.py](../../tests/test_tokenizer.py)
-- 相关笔记：[BPE 训练](./train_bpe_implementation_notes.md)、[BPE 原理](./bpe_tokenizer.md)、[非编码问题](./bpe_conceptual_questions_notes.md)、[训练脚本](../training_loop_implementation_notes.md)
-- handout：[cs336_assignment1_basics_extracted.md](../cs336_assignment1_basics_extracted.md) §2.6（`tokenizer`）
+- 相关笔记：[BPE 训练](./01_04_train_bpe_implementation_notes.md)、[BPE 原理](./01_01_bpe_tokenizer.md)、[非编码问题](./01_03_bpe_conceptual_questions_notes.md)、[训练脚本](../03_10_training_loop_implementation_notes.md)
+- handout：[00_01_cs336_assignment1_basics_extracted.md](../00_01_cs336_assignment1_basics_extracted.md) §2.6（`tokenizer`）

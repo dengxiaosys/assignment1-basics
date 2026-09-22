@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_cross_entropy`
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py) 的 `test_cross_entropy`
 
-依赖前置：[softmax 笔记](./softmax_implementation_notes.md)（同款减最大值稳定技巧）、[TransformerLM 笔记](./transformer_lm_implementation_notes.md)（logits 的来源）。
+依赖前置：[softmax 笔记](./02_10_softmax_implementation_notes.md)（同款减最大值稳定技巧）、[TransformerLM 笔记](./02_14_transformer_lm_implementation_notes.md)（logits 的来源）。
 
 ---
 
@@ -47,7 +47,7 @@ $$ \text{loss} = \mathrm{LSE}(o) - o[t] $$
 
 朴素地算 $\exp(o[a])$ 会**溢出**：logits 到几十上百时 $\exp$ 就变 `inf`（float32 里 $e^{89}$ 已溢出）。测试专门用 `1000×` 放大的 logits 卡这一点。
 
-解法和 [softmax 笔记](./softmax_implementation_notes.md) 完全一样——利用 LSE 的**平移不变性**。令 $c=\max_a o[a]$：
+解法和 [softmax 笔记](./02_10_softmax_implementation_notes.md) 完全一样——利用 LSE 的**平移不变性**。令 $c=\max_a o[a]$：
 
 $$ \mathrm{LSE}(o) = c + \log\sum_a \exp(o[a]-c) $$
 
@@ -143,5 +143,5 @@ $$ \mathrm{perplexity} = \exp\!\left(\frac{1}{m}\sum_{i=1}^{m}\ell_i\right) $$
 - 本仓库实现：[cs336_basics/nn_utils.py](../cs336_basics/nn_utils.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py)
-- 依赖：[softmax_implementation_notes.md](./softmax_implementation_notes.md)（同款 log-sum-exp 稳定）、[transformer_lm_implementation_notes.md](./transformer_lm_implementation_notes.md)（logits 来源）
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（式 16、17）
+- 依赖：[02_10_softmax_implementation_notes.md](./02_10_softmax_implementation_notes.md)（同款 log-sum-exp 稳定）、[02_14_transformer_lm_implementation_notes.md](./02_14_transformer_lm_implementation_notes.md)（logits 来源）
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（式 16、17）

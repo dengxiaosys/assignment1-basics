@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_linear`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_linear`
 
-配套背景见同目录 [nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)（讲 `nn.Module`/`nn.Linear` 原理）与 [pytest_fixtures_explained.md](./pytest_fixtures_explained.md)（讲测试怎么跑）。
+配套背景见同目录 [02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)（讲 `nn.Module`/`nn.Linear` 原理）与 [00_03_pytest_fixtures_explained.md](./00_03_pytest_fixtures_explained.md)（讲测试怎么跑）。
 
 > 记号约定（仓库规则 R1/R2）：数学上以列向量记 $y = Wx$；PyTorch 中特征在最后一维，实现为 $y = x W^\top$。下文两种写法都会出现，涉及张量形状时按框架布局。
 
@@ -202,4 +202,4 @@ uv run pytest -k test_linear
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 背景：[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)、[pytest_fixtures_explained.md](./pytest_fixtures_explained.md)
+- 背景：[02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)、[00_03_pytest_fixtures_explained.md](./00_03_pytest_fixtures_explained.md)

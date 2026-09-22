@@ -11,7 +11,7 @@
 - BPE 编解码：[cs336_basics/bpe.py](../cs336_basics/bpe.py) 的 `Tokenizer`
 - 训练入口：[cs336_basics/train.py](../cs336_basics/train.py)
 
-背景：[checkpoint 笔记](./checkpointing_implementation_notes.md)、[Tokenizer 笔记](./bpe/tokenizer_implementation_notes.md)、handout §6 `decoding`。
+背景：[checkpoint 笔记](./03_09_checkpointing_implementation_notes.md)、[Tokenizer 笔记](./bpe/01_06_tokenizer_implementation_notes.md)、handout §6 `decoding`。
 
 ---
 
@@ -122,7 +122,7 @@ uv run cs336-generate \
   --device cpu
 ```
 
-在 GPU C 上运行时，把最后一项改为 `--device cuda`；注意 C 必须有独立的、包含 CUDA 版 PyTorch 的环境，不能复用 B 的 `.venv`。跨机开发的挂载/环境约束见 [跨机开发笔记](./cross_machine_dev_B_to_C_gpu_guide.md)。
+在 GPU C 上运行时，把最后一项改为 `--device cuda`；注意 C 必须有独立的、包含 CUDA 版 PyTorch 的环境，不能复用 B 的 `.venv`。跨机开发的挂载/环境约束见 [跨机开发笔记](./90_01_cross_machine_dev_B_to_C_gpu_guide.md)。
 
 ---
 
@@ -212,4 +212,4 @@ checkpoint -> model weights -> prompt encode -> autoregressive forward -> token 
 - 推理实现：[cs336_basics/generate.py](../cs336_basics/generate.py)
 - checkpoint 实现：[cs336_basics/checkpoint.py](../cs336_basics/checkpoint.py)
 - BPE：[cs336_basics/bpe.py](../cs336_basics/bpe.py)
-- 相关笔记：[checkpointing_implementation_notes.md](./checkpointing_implementation_notes.md)、[tokenizer_implementation_notes.md](./bpe/tokenizer_implementation_notes.md)、[cross_machine_dev_B_to_C_gpu_guide.md](./cross_machine_dev_B_to_C_gpu_guide.md)
+- 相关笔记：[03_09_checkpointing_implementation_notes.md](./03_09_checkpointing_implementation_notes.md)、[01_06_tokenizer_implementation_notes.md](./bpe/01_06_tokenizer_implementation_notes.md)、[90_01_cross_machine_dev_B_to_C_gpu_guide.md](./90_01_cross_machine_dev_B_to_C_gpu_guide.md)

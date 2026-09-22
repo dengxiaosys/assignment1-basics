@@ -9,13 +9,13 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_gradient_clipping`
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py) 的 `test_gradient_clipping`
 
-前置：[学习率调参笔记](./learning_rate_tuning_notes.md)（梯度过大导致发散）、[优化器 API 笔记](./pytorch_optimizer_api_notes.md)（训练四拍：backward 后、step 前做裁剪）。
+前置：[学习率调参笔记](./03_03_learning_rate_tuning_notes.md)（梯度过大导致发散）、[优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md)（训练四拍：backward 后、step 前做裁剪）。
 
 ---
 
 ## 1. 背景：为什么要裁剪梯度
 
-训练中偶尔会出现**梯度爆炸**——某个 batch 的梯度突然特别大（数据异常、数值不稳、深层网络累积等），一步大更新就可能把参数推到坏区域，导致 loss 变 NaN 或发散（见 [lr 笔记](./learning_rate_tuning_notes.md)）。
+训练中偶尔会出现**梯度爆炸**——某个 batch 的梯度突然特别大（数据异常、数值不稳、深层网络累积等），一步大更新就可能把参数推到坏区域，导致 loss 变 NaN 或发散（见 [lr 笔记](./03_03_learning_rate_tuning_notes.md)）。
 
 **梯度裁剪**是一道"保险丝"：**限制梯度的整体幅度不超过一个阈值**，异常大的梯度被按比例缩回安全范围，正常的梯度不受影响。它让训练对偶发的大梯度更鲁棒，是 LLM 训练的标准操作（常配合 AdamW 使用）。
 
@@ -70,9 +70,9 @@ if total_norm > max_l2_norm:
 
 **时间复杂度 $O(P)$**：算全局范数要把每个梯度元素平方并求和（遍历一遍 $P$ 个元素），缩放又遍历一遍——都是逐元素线性操作，共 $O(P)$。**没有矩阵乘**，只有逐元素乘加与规约。
 
-**空间复杂度 $O(1)$ 额外开销**：全部就地进行——范数是标量累加、缩放用 `g.mul_()` 原地改，不额外分配与 $P$ 同量级的张量。梯度本身占的 $O(P)$ 显存是训练本就有的（见 [AdamW 核算笔记](./adamw_accounting_notes.md) 的显存四块），裁剪不额外增加。
+**空间复杂度 $O(1)$ 额外开销**：全部就地进行——范数是标量累加、缩放用 `g.mul_()` 原地改，不额外分配与 $P$ 同量级的张量。梯度本身占的 $O(P)$ 显存是训练本就有的（见 [AdamW 核算笔记](./03_05_adamw_accounting_notes.md) 的显存四块），裁剪不额外增加。
 
-**会是性能瓶颈吗？一般不会。** 对照一个训练步的成本（见 [AdamW 核算笔记](./adamw_accounting_notes.md)）：前向+反向的矩阵乘是 $O(B\cdot s\cdot P)$ 量级（每个 token 都要过全部参数），高出裁剪的 $O(P)$ **好几个数量级**（差了 $B\cdot s$ 倍，即 batch×序列长度）。所以裁剪相对 matmul 几乎免费，和 AdamW 的逐元素更新是同一量级、同样可忽略。
+**会是性能瓶颈吗？一般不会。** 对照一个训练步的成本（见 [AdamW 核算笔记](./03_05_adamw_accounting_notes.md)）：前向+反向的矩阵乘是 $O(B\cdot s\cdot P)$ 量级（每个 token 都要过全部参数），高出裁剪的 $O(P)$ **好几个数量级**（差了 $B\cdot s$ 倍，即 batch×序列长度）。所以裁剪相对 matmul 几乎免费，和 AdamW 的逐元素更新是同一量级、同样可忽略。
 
 **什么情况下可能变得不可忽略**：
 
@@ -115,5 +115,5 @@ uv run pytest -k test_gradient_clipping
 - 本仓库实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_nn_utils.py](../tests/test_nn_utils.py)
-- 前置：[learning_rate_tuning_notes.md](./learning_rate_tuning_notes.md)、[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)
+- 前置：[03_03_learning_rate_tuning_notes.md](./03_03_learning_rate_tuning_notes.md)、[03_02_pytorch_optimizer_api_notes.md](./03_02_pytorch_optimizer_api_notes.md)
 - PyTorch：`torch.nn.utils.clip_grad_norm_`

@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_transformer_lm`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_transformer_lm`、`test_transformer_lm_truncated_input`
 
-组件背景见：[transformer_block 笔记](./transformer_block_implementation_notes.md)（block 本身）、[embedding 笔记](./embedding_implementation_notes.md)、[linear 笔记](./linear_implementation_notes.md)。
+组件背景见：[transformer_block 笔记](./02_13_transformer_block_implementation_notes.md)（block 本身）、[embedding 笔记](./02_03_embedding_implementation_notes.md)、[linear 笔记](./02_02_linear_implementation_notes.md)。
 
 ---
 
@@ -20,7 +20,7 @@ decoder-only Transformer 语言模型做的事：给定一串 token id，为每�
 $$ \text{token ids} \to \text{Embedding} \to \underbrace{\text{Block} \times N}_{\text{堆叠}} \to \text{RMSNorm} \to \text{Linear} \to \text{logits} $$
 
 - **token_embeddings**：把整型 id 查表成 `d_model` 维向量；
-- **N × TransformerBlock**：每个 block 含注意力 + 前馈（见 [block 笔记](./transformer_block_implementation_notes.md)），逐层精炼表示；
+- **N × TransformerBlock**：每个 block 含注意力 + 前馈（见 [block 笔记](./02_13_transformer_block_implementation_notes.md)），逐层精炼表示；
 - **ln_final（RMSNorm）**：最后一层归一化，稳定输出尺度；
 - **lm_head（Linear）**：把 `d_model` 投影到 `vocab_size`，得到每个 token 的**未归一化 logits**。
 
@@ -48,7 +48,7 @@ self.layers = nn.ModuleList([
 ])
 ```
 
-- **为什么用 `ModuleList`**：它是专门用来存"子模块列表"的容器——列表里的每个 block 都会被正确登记为 `TransformerLM` 的子模块，参数进 `parameters()`/`state_dict()`。普通 Python `list` 不会被 `nn.Module` 登记（是 [nn_module 笔记](./nn_module_and_linear_explained.md) 里说的常见 bug）；
+- **为什么用 `ModuleList`**：它是专门用来存"子模块列表"的容器——列表里的每个 block 都会被正确登记为 `TransformerLM` 的子模块，参数进 `parameters()`/`state_dict()`。普通 Python `list` 不会被 `nn.Module` 登记（是 [nn_module 笔记](./02_01_nn_module_and_linear_explained.md) 里说的常见 bug）；
 - **键名自然对齐**：`ModuleList` 的 `state_dict` 键就是 `layers.0.xxx`、`layers.1.xxx`……正好匹配官方权重的 `layers.{i}.` 命名。
 
 `forward` 里就是简单地按顺序过每一层：
@@ -146,6 +146,6 @@ uv run pytest -k test_transformer_lm
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 组件笔记：[transformer_block_implementation_notes.md](./transformer_block_implementation_notes.md)、[embedding_implementation_notes.md](./embedding_implementation_notes.md)、[linear_implementation_notes.md](./linear_implementation_notes.md)
-- 设计原则：[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)（ModuleList/登记）
+- 组件笔记：[02_13_transformer_block_implementation_notes.md](./02_13_transformer_block_implementation_notes.md)、[02_03_embedding_implementation_notes.md](./02_03_embedding_implementation_notes.md)、[02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)
+- 设计原则：[02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)（ModuleList/登记）
 - 原始文献：Vaswani et al., *Attention Is All You Need*, 2017。

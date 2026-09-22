@@ -12,7 +12,7 @@
 4. 第 5–6 节：多频率设计、长上下文扩展、优缺点；
 5. 第 7 节：把其它位置编码（正弦、可学习绝对、Shaw、T5、ALiBi、NoPE）逐一展开，并与 RoPE 对照。
 
-本讲义与同目录的 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)、[glu_explained.md](./glu_explained.md)、以及 [bpe/byte_level_bpe_worked_example.md](./bpe/byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。前两篇分别讲"归一化放哪"和"前馈子层怎么算"，本篇讲"位置信息怎么进注意力"，共同构成现代 LLM 层的核心组件。
+本讲义与同目录的 [02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md)、[02_05_glu_explained.md](./02_05_glu_explained.md)、以及 [bpe/01_02_byte_level_bpe_worked_example.md](./bpe/01_02_byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。前两篇分别讲"归一化放哪"和"前馈子层怎么算"，本篇讲"位置信息怎么进注意力"，共同构成现代 LLM 层的核心组件。
 
 > 说明：本文是概念讲解，不含任何作业实现代码。文中矩阵与点积表达式用于解释原理，不是可直接粘贴的作业答案。
 

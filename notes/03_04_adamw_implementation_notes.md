@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `get_adamw_cls`
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py) 的 `test_adamw`
 
-前置：[优化器 API 笔记](./pytorch_optimizer_api_notes.md)（`step`/`state`/`param_groups` 契约）、[学习率调参笔记](./learning_rate_tuning_notes.md)（步长直觉）。本文只在 §2 讲清算法后按 handout Algorithm 1 落地。
+前置：[优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md)（`step`/`state`/`param_groups` 契约）、[学习率调参笔记](./03_03_learning_rate_tuning_notes.md)（步长直觉）。本文只在 §2 讲清算法后按 handout Algorithm 1 落地。
 
 ---
 
@@ -23,13 +23,13 @@ AdamW 不是凭空出现的，它是一条"每一步都在补上一个前任缺�
 
 $$ \theta \leftarrow \theta - \alpha\, g_t $$
 
-**思想**：朝当前梯度的反方向（下坡）迈一步（见 [优化器 API 笔记](./pytorch_optimizer_api_notes.md) 的"损失地形下山"）。
+**思想**：朝当前梯度的反方向（下坡）迈一步（见 [优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md) 的"损失地形下山"）。
 
 **痛点**：
 
 1. **所有参数共用一个 $\alpha$**：但不同参数的梯度尺度差异可能很大，一个学习率很难同时合适；
 2. **只看当前梯度**：梯度噪声大时方向抖动，在"狭长峡谷"地形里会来回震荡、收敛慢；
-3. **对学习率极敏感**：太小慢、太大发散（见 [lr 笔记](./learning_rate_tuning_notes.md) 的实测）。
+3. **对学习率极敏感**：太小慢、太大发散（见 [lr 笔记](./03_03_learning_rate_tuning_notes.md) 的实测）。
 
 ### 1.2 Momentum（动量 SGD）
 
@@ -168,7 +168,7 @@ p.data.mul_(1 - lr * weight_decay)                  # 解耦权重衰减 θ←(1
 p.data.addcdiv_(m, v.sqrt().add_(eps), value=-lr_t) # θ ← θ - α_t m/(√v+ε)
 ```
 
-- **遵循优化器契约**（见 [优化器 API 笔记](./pytorch_optimizer_api_notes.md)）：继承 `torch.optim.Optimizer`，`__init__` 把 `lr/betas/eps/weight_decay` 放进 `defaults`；`step` 两层遍历 `param_groups → params`、跳过 `p.grad is None`、状态存 `self.state[p]`、**原地**更新 `p.data`。
+- **遵循优化器契约**（见 [优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md)）：继承 `torch.optim.Optimizer`，`__init__` 把 `lr/betas/eps/weight_decay` 放进 `defaults`；`step` 两层遍历 `param_groups → params`、跳过 `p.grad is None`、状态存 `self.state[p]`、**原地**更新 `p.data`。
 - **状态初始化**：`if len(state)==0` 时建 `m=v=zeros_like(p)`、`t=0`；这就是"AdamW 是 stateful、每参数存两个矩"的体现，也是 checkpoint 要保存 optimizer 状态的原因。
 - **原地算子**：`mul_/add_/addcmul_/addcdiv_` 都原地更新 `m`、`v`、`p.data`，省显存；`v.sqrt()` 返回新张量，`.add_(eps)` 只改这个临时结果、不污染 `v`。
 
@@ -207,6 +207,6 @@ uv run pytest -k test_adamw
 - 本仓库实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py)
-- 前置：[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)、[learning_rate_tuning_notes.md](./learning_rate_tuning_notes.md)
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（4.3 AdamW、Algorithm 1）
+- 前置：[03_02_pytorch_optimizer_api_notes.md](./03_02_pytorch_optimizer_api_notes.md)、[03_03_learning_rate_tuning_notes.md](./03_03_learning_rate_tuning_notes.md)
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（4.3 AdamW、Algorithm 1）
 - 原始文献：Loshchilov & Hutter, *Decoupled Weight Decay Regularization* (AdamW), 2019；Kingma & Ba, *Adam*, 2015。

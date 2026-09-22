@@ -9,13 +9,13 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_get_lr_cosine_schedule`
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py) 的 `test_get_lr_cosine_schedule`
 
-前置：[学习率调参笔记](./learning_rate_tuning_notes.md)（lr 过大发散、过小慢）、[优化器 API 笔记](./pytorch_optimizer_api_notes.md#L146)（lr 随 step 变化）。
+前置：[学习率调参笔记](./03_03_learning_rate_tuning_notes.md)（lr 过大发散、过小慢）、[优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md#L146)（lr 随 step 变化）。
 
 ---
 
 ## 1. 背景：为什么学习率要随训练变化
 
-固定学习率有两难（见 [lr 笔记](./learning_rate_tuning_notes.md)）：训练**初期**参数远离最优、梯度大且噪声大，大 lr 易发散；训练**后期**接近谷底，大 lr 会在最优点附近来回震荡、难收敛。理想做法是**先小、再大、后小**：
+固定学习率有两难（见 [lr 笔记](./03_03_learning_rate_tuning_notes.md)）：训练**初期**参数远离最优、梯度大且噪声大，大 lr 易发散；训练**后期**接近谷底，大 lr 会在最优点附近来回震荡、难收敛。理想做法是**先小、再大、后小**：
 
 - **Warmup（预热）**：开头用很小的 lr 线性升到峰值，避开初期不稳定（此时激活/梯度分布还没稳定，直接大 lr 常炸）；
 - **Annealing（退火）**：达到峰值后平滑地降到一个很小的值，让后期精细收敛。
@@ -63,7 +63,7 @@ if it <= cosine_cycle_iters:
 return min_lr
 ```
 
-纯函数、无参数、无状态——它只是"给定步号 $t$ 返回该用的 lr"。训练循环里每步先用它算出 lr、写进 `optimizer.param_groups[i]["lr"]`，再 `opt.step()`（呼应 [优化器 API 笔记](./pytorch_optimizer_api_notes.md#L174) 里"lr 随 step 变化"）。
+纯函数、无参数、无状态——它只是"给定步号 $t$ 返回该用的 lr"。训练循环里每步先用它算出 lr、写进 `optimizer.param_groups[i]["lr"]`，再 `opt.step()`（呼应 [优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md#L174) 里"lr 随 step 变化"）。
 
 `run_get_lr_cosine_schedule` 直接转发。`test_get_lr_cosine_schedule` 用 $\alpha_{\max}{=}1,\alpha_{\min}{=}0.1,T_w{=}7,T_c{=}21$ 跑 $t=0..24$，逐点比对预期 lr 序列——先线性升到 1（第 7 步），再余弦降到 0.1（第 21 步），之后恒为 0.1。
 
@@ -91,5 +91,5 @@ uv run pytest -k test_get_lr_cosine_schedule
 - 本仓库实现：[cs336_basics/optimizer.py](../cs336_basics/optimizer.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_optimizer.py](../tests/test_optimizer.py)
-- 前置：[learning_rate_tuning_notes.md](./learning_rate_tuning_notes.md)、[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（§4.4）；LLaMA (Touvron et al. 2023) 用余弦调度。
+- 前置：[03_03_learning_rate_tuning_notes.md](./03_03_learning_rate_tuning_notes.md)、[03_02_pytorch_optimizer_api_notes.md](./03_02_pytorch_optimizer_api_notes.md)
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（§4.4）；LLaMA (Touvron et al. 2023) 用余弦调度。

@@ -4,7 +4,7 @@
 
 在动手写 AdamW 之前，先讲清楚一件事：**在 PyTorch 里自定义一个优化器，需要遵守哪些约定（契约）？** 本文系统说明 `torch.optim.Optimizer` 的接口要求、`param_groups` 与 `state` 两大机制、`step` 的写法规范，以及优化器如何嵌入训练循环。理解这套契约后，AdamW 只是"在 `step` 里换一套更新公式"。
 
-对应背景：handout [cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md) 的 `### 4.2 The SGD Optimizer`；接下来要实现的 [tests/adapters.py](../tests/adapters.py) 的 `get_adamw_cls`。
+对应背景：handout [00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md) 的 `### 4.2 The SGD Optimizer`；接下来要实现的 [tests/adapters.py](../tests/adapters.py) 的 `get_adamw_cls`。
 
 > 说明：本文讲的是**优化器 API 的通用规范**，用 handout 自带的 SGD 作合法示例；不含作业要交的 AdamW 实现。
 
@@ -125,7 +125,7 @@ def step(self, closure=None):
 - **`param_groups` 的组织**：你只管在 `__init__` 传 `defaults`，分组逻辑基类包办；
 - **`add_param_group()`**：训练中动态加参数组。
 
-这与 `nn.Module` 的哲学一致（见 [nn_module 笔记](./nn_module_and_linear_explained.md)）：**遵守约定登记 → 换来一整套现成服务**。
+这与 `nn.Module` 的哲学一致（见 [nn_module 笔记](./02_01_nn_module_and_linear_explained.md)）：**遵守约定登记 → 换来一整套现成服务**。
 
 ---
 
@@ -182,7 +182,7 @@ opt.step()        # 4. 优化器迈步：按规则用 p.grad 更新每个 p（�
 
 **前提条件（不满足会报错或拿不到梯度）**：
 
-1. **loss 必须是标量**（单个数），否则要显式传 `gradient` 参数。语言模型里我们对逐 token 损失取了 `.mean()`（见 [交叉熵笔记](./cross_entropy_implementation_notes.md)），结果是标量，所以能直接 `loss.backward()`。若对非标量张量 `t` 调用，需写 `t.backward(gradient=...)` 指定上游梯度——因为"对向量求导"要先知道对它每个分量的权重。
+1. **loss 必须是标量**（单个数），否则要显式传 `gradient` 参数。语言模型里我们对逐 token 损失取了 `.mean()`（见 [交叉熵笔记](./03_01_cross_entropy_implementation_notes.md)），结果是标量，所以能直接 `loss.backward()`。若对非标量张量 `t` 调用，需写 `t.backward(gradient=...)` 指定上游梯度——因为"对向量求导"要先知道对它每个分量的权重。
 2. **计算图里必须有 `requires_grad=True` 的张量**。模型参数（`nn.Parameter`）默认 `requires_grad=True`；loss 必须是**从这些参数经过一串可微运算算出来的**。如果所有输入都不需要梯度，loss 就没有 `grad_fn`，`backward` 会报错 "element 0 ... does not require grad and does not have a grad_fn"。
 3. **前向过程必须在 autograd 追踪下进行**。默认就是追踪的；但如果前向被包在 `torch.no_grad()` 里、或中途对张量调了 `.detach()`，那条路径就断开了计算图，loss 拿不到通向参数的梯度路径，backward 无效。
 4. **用到的中间量没有被原地操作破坏**。autograd 反向时需要某些前向的中间结果；若你用原地操作（`x.add_()` 等）覆盖了它们，backward 可能报 "a variable needed for gradient computation has been modified by an inplace operation"。
@@ -214,7 +214,7 @@ opt.step()        # 4. 优化器迈步：按规则用 p.grad 更新每个 p（�
 
 ## 参考
 
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（4.2 The SGD Optimizer、Algorithm 1 AdamW）
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（4.2 The SGD Optimizer、Algorithm 1 AdamW）
 - 适配层：[tests/adapters.py](../tests/adapters.py)（`get_adamw_cls`）
-- 设计哲学对照：[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)（"登记换服务"）
+- 设计哲学对照：[02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)（"登记换服务"）
 - PyTorch 文档：`torch.optim.Optimizer`（`https://pytorch.org/docs/stable/optim.html`）

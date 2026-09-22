@@ -4,7 +4,7 @@
 
 CS336 assignment1 §2 除了要写代码（`train_bpe`、`Tokenizer`）外，还夹着一批**问答/分析题**：Unicode 理解、UTF-8 编码取舍、训练观察、分词器对比、压缩率与吞吐估计。本文把 §2 里**所有非编码问题**逐题答清，并补足背后的背景知识（Unicode / UTF-8 / 子词切分 / BPE / 压缩率 / 吞吐）。
 
-对应 handout（`notes/cs336_assignment1_basics_extracted.md`）的 §2，涉及题号：`unicode1`、`unicode2`、`train_bpe_tinystories`(问答部分)、`train_bpe_expts_owt`(问答部分)、`tokenizer_experiments`。
+对应 handout（`notes/00_01_cs336_assignment1_basics_extracted.md`）的 §2，涉及题号：`unicode1`、`unicode2`、`train_bpe_tinystories`(问答部分)、`train_bpe_expts_owt`(问答部分)、`tokenizer_experiments`。
 
 > **说明**：`unicode1`/`unicode2` 是确定性问题，下面的答案都在 Python 里实测过。`train_bpe_*` 和 `tokenizer_experiments` 里有几问依赖**实际训练出的 BPE**（如具体耗时、最长 token、实测压缩率）——这些我给出**方法 + 预期范围 + 判断依据**，并标注 🔧「跑完实验回填」，等 `run_train_bpe`/`Tokenizer` 实现并训练后填入实测值。
 
@@ -106,7 +106,7 @@ UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe7 in position 0: unexpect
 
 ## 4. `train_bpe_tinystories`（问答部分）
 
-> 已在本机（56 核，`num_processes=16`）实跑，数值为实测；实验脚本见 [train_bpe_experiment.py](../../cs336_basics/train_bpe_experiment.py)，详细说明见 [train_bpe_tinystories_experiment_notes.md](./train_bpe_tinystories_experiment_notes.md)。
+> 已在本机（56 核，`num_processes=16`）实跑，数值为实测；实验脚本见 [train_bpe_experiment.py](../../cs336_basics/train_bpe_experiment.py)，详细说明见 [01_05_train_bpe_tinystories_experiment_notes.md](./01_05_train_bpe_tinystories_experiment_notes.md)。
 
 ### (a) 训练耗时/内存？最长 token 是什么？合理吗？
 
@@ -201,7 +201,7 @@ $$T \approx \frac{825\times10^9}{2\times10^6}\ \text{s} \approx 4.1\times10^5\ \
 
 ## 参考
 
-- handout：[cs336_assignment1_basics_extracted.md](../cs336_assignment1_basics_extracted.md) §2（`unicode1`、`unicode2`、`train_bpe_tinystories`、`train_bpe_expts_owt`、`tokenizer_experiments`）
+- handout：[00_01_cs336_assignment1_basics_extracted.md](../00_01_cs336_assignment1_basics_extracted.md) §2（`unicode1`、`unicode2`、`train_bpe_tinystories`、`train_bpe_expts_owt`、`tokenizer_experiments`）
 - 相关实现（待完成）：[tests/adapters.py](../../tests/adapters.py) 的 `run_train_bpe` / `get_tokenizer`
 - GPT-2 预分词正则：`openai/tiktoken#234`
 - 数据集背景：TinyStories（合成幼儿故事）vs OpenWebText（真实网页）——见此前对话中的对比

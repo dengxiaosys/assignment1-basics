@@ -11,7 +11,7 @@
 3. 第 4–5 节：GLU 家族（ReGLU/GEGLU/SwiGLU 等）与参数量对齐的工程细节；
 4. 第 6 节起：为什么它有效、历史脉络、优缺点与相关设计。
 
-本讲义与同目录的 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)、以及 [bpe/byte_level_bpe_worked_example.md](./bpe/byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。上一篇讲"归一化放在哪里"，这一篇讲"前馈子层内部怎么算"，两者都作用在同一个 Transformer 层里。
+本讲义与同目录的 [02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md)、以及 [bpe/01_02_byte_level_bpe_worked_example.md](./bpe/01_02_byte_level_bpe_worked_example.md) 属于同一套 CS336 学习笔记。上一篇讲"归一化放在哪里"，这一篇讲"前馈子层内部怎么算"，两者都作用在同一个 Transformer 层里。
 
 > 说明：本文是概念讲解，不含任何作业实现代码。文中 `(xW) ⊗ σ(xV)` 等是数学表达式，用于解释原理，而非可直接粘贴的作业答案。
 
@@ -187,7 +187,7 @@ GLU 缺乏一个被普遍接受的严格理论，但有几个相互印证的直�
 为避免概念混淆，明确几个"正交"的维度：
 
 - **GLU vs 激活函数**：SiLU、GELU 本身是**逐点激活函数**；GLU 是一种**门控结构**。SwiGLU = GLU 结构 + SiLU 门激活，二者是"结构"与"零件"的关系。
-- **GLU vs Pre/Post-Norm**：前者决定 FFN 内部怎么算，后者决定归一化放在子层前还是后（见 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)），二者独立，可自由组合。
+- **GLU vs Pre/Post-Norm**：前者决定 FFN 内部怎么算，后者决定归一化放在子层前还是后（见 [02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md)），二者独立，可自由组合。
 - **GLU vs MoE**：MoE（专家混合）是在 FFN 层做**稀疏路由**，选择性激活多个专家 FFN；GLU 是把**单个** FFN 换成门控形式。二者可以叠加：每个专家本身也能是 SwiGLU。
 
 ---

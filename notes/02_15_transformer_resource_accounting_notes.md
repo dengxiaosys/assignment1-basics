@@ -4,7 +4,7 @@
 
 回答 CS336 assignment1 的 `transformer_accounting` 问题：一个 Transformer LM 有多少参数、前向一次要多少 FLOPs、哪些部件最耗算力、模型规模与上下文长度如何改变各部件占比。同时把背后的**核算方法**讲清楚，作为理解"模型为什么这么贵"的基础。
 
-对应 handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md) 的 `#### Resource accounting` 与 `Problem (transformer_accounting)`。
+对应 handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md) 的 `#### Resource accounting` 与 `Problem (transformer_accounting)`。
 
 > 说明：这是**分析题**，本文给出推导、公式与数值结论；数值由脚本按"我们的作业架构"精确计算（SwiGLU 三矩阵 FFN、RoPE、RMSNorm、无 bias）。与真实 GPT-2 的差异见 §5。
 
@@ -139,6 +139,6 @@
 
 ## 参考
 
-- Handout：[cs336_assignment1_basics_extracted.md](./cs336_assignment1_basics_extracted.md)（Resource accounting 一节）
-- 组件参数来源：[transformer_lm_implementation_notes.md](./transformer_lm_implementation_notes.md)、[multihead_attention_implementation_notes.md](./multihead_attention_implementation_notes.md)、[swiglu_implementation_notes.md](./swiglu_implementation_notes.md)
+- Handout：[00_01_cs336_assignment1_basics_extracted.md](./00_01_cs336_assignment1_basics_extracted.md)（Resource accounting 一节）
+- 组件参数来源：[02_14_transformer_lm_implementation_notes.md](./02_14_transformer_lm_implementation_notes.md)、[02_12_multihead_attention_implementation_notes.md](./02_12_multihead_attention_implementation_notes.md)、[02_06_swiglu_implementation_notes.md](./02_06_swiglu_implementation_notes.md)
 - 原始文献：Vaswani et al., *Attention Is All You Need*, 2017；Radford et al., *Language Models are Unsupervised Multitask Learners* (GPT-2), 2019。

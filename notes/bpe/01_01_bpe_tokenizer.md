@@ -13,7 +13,7 @@
 
 Byte-level BPE 的逐轮训练、merge rank、编码、解码及数学形式化推导已经集中到：
 
-- [Byte-level BPE 全流程：一个可手工复算的完整例子](./byte_level_bpe_worked_example.md)
+- [Byte-level BPE 全流程：一个可手工复算的完整例子](./01_02_byte_level_bpe_worked_example.md)
 
 本文不再重复该算例中的操作细节。
 
@@ -273,7 +273,7 @@ BPE 通常优化局部频率与序列压缩，而不是验证集 loss、推理�
 | BPE + byte fallback | 子词为主，字节为回退 | 常见文本紧凑，任意输入可表示 | 罕见字符会突然膨胀为多个 token |
 | Domain-adaptive BPE | 特定领域语料 | 对代码、医学、法律等压缩率高 | 跨领域泛化和兼容性较差 |
 
-完整 merge 算例见 [Byte-level BPE 全流程](./byte_level_bpe_worked_example.md)。
+完整 merge 算例见 [Byte-level BPE 全流程](./01_02_byte_level_bpe_worked_example.md)。
 
 ## 8. 需要区分的三个概念层级
 

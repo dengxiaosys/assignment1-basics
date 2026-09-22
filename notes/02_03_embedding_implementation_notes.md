@@ -2,14 +2,14 @@
 
 ## 0. 本文目标
 
-记录 CS336 assignment1 里 `Embedding` 层的实现思路——讲清楚**每个决定为什么这么做**：它本质是什么、weight 形状怎么定、`forward` 为何只是"按行索引"、adapter 怎么接到测试。结构与配套的 [linear_implementation_notes.md](./linear_implementation_notes.md) 保持一致。
+记录 CS336 assignment1 里 `Embedding` 层的实现思路——讲清楚**每个决定为什么这么做**：它本质是什么、weight 形状怎么定、`forward` 为何只是"按行索引"、adapter 怎么接到测试。结构与配套的 [02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md) 保持一致。
 
 对应实际代码：
 - 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `Embedding`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_embedding`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_embedding`
 
-背景见 [nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)、[pytest_fixtures_explained.md](./pytest_fixtures_explained.md)。
+背景见 [02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)、[00_03_pytest_fixtures_explained.md](./00_03_pytest_fixtures_explained.md)。
 
 ---
 
@@ -50,7 +50,7 @@ PyTorch 的**高级索引**：用一个整型张量去索引矩阵的第 0 维�
 - `token_ids` 形状 `(batch, seq)` → `self.weight[token_ids]` 形状 `(batch, seq, d_model)`；
 - `token_ids` 是标量/一维/任意维都成立，输出自动是 `token_ids.shape + (d_model,)`。
 
-这一步天然可微：梯度只会回流到**被取用的那些行**（用到的 id 才有梯度，没用到的行梯度为 0），这正是 embedding 训练的预期行为。也因此不需要手写 backward——autograd 对索引操作有支持（见 [linear 笔记 2.6](./linear_implementation_notes.md)）。
+这一步天然可微：梯度只会回流到**被取用的那些行**（用到的 id 才有梯度，没用到的行梯度为 0），这正是 embedding 训练的预期行为。也因此不需要手写 backward——autograd 对索引操作有支持（见 [linear 笔记 2.6](./02_02_linear_implementation_notes.md)）。
 
 ### 2.4 初始化（只影响独立使用，不影响本测试）
 
@@ -111,4 +111,4 @@ uv run pytest -k test_embedding
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 配套：[linear_implementation_notes.md](./linear_implementation_notes.md)、[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)
+- 配套：[02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)、[02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)

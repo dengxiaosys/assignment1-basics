@@ -2,14 +2,14 @@
 
 ## 0. 本文目标
 
-记录 CS336 assignment1 里 `RMSNorm` 的实现思路，重点讲**它算什么、为什么要在 float32 上算、weight 是什么**。结构与 [linear_implementation_notes.md](./linear_implementation_notes.md)、[embedding_implementation_notes.md](./embedding_implementation_notes.md) 一致。
+记录 CS336 assignment1 里 `RMSNorm` 的实现思路，重点讲**它算什么、为什么要在 float32 上算、weight 是什么**。结构与 [02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)、[02_03_embedding_implementation_notes.md](./02_03_embedding_implementation_notes.md) 一致。
 
 对应实际代码：
 - 实现：[cs336_basics/model.py](../cs336_basics/model.py) 的 `RMSNorm`
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_rmsnorm`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_rmsnorm`
 
-RMSNorm 的原理、与 LayerNorm 的区别、以及"增益 $g_i$ 为何每块独立"已在 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md) 第 6 节讲过，本文不重复推导，聚焦实现。
+RMSNorm 的原理、与 LayerNorm 的区别、以及"增益 $g_i$ 为何每块独立"已在 [02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md) 第 6 节讲过，本文不重复推导，聚焦实现。
 
 ---
 
@@ -66,7 +66,7 @@ return y.to(in_dtype)
 
 ### 2.5 是否手写 backward
 
-不需要。`pow`、`mean`、`sqrt`、除法、乘法都是可微算子，autograd 自动求导（同 [linear 笔记 2.6](./linear_implementation_notes.md)）。梯度会同时回流到输入 `x` 和增益 `weight`。
+不需要。`pow`、`mean`、`sqrt`、除法、乘法都是可微算子，autograd 自动求导（同 [linear 笔记 2.6](./02_02_linear_implementation_notes.md)）。梯度会同时回流到输入 `x` 和增益 `weight`。
 
 ---
 
@@ -116,5 +116,5 @@ uv run pytest -k test_rmsnorm
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 原理背景：[prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)（RMSNorm 与 LayerNorm、$g_i$ 独立性）
-- 配套：[linear_implementation_notes.md](./linear_implementation_notes.md)、[embedding_implementation_notes.md](./embedding_implementation_notes.md)
+- 原理背景：[02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md)（RMSNorm 与 LayerNorm、$g_i$ 独立性）
+- 配套：[02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)、[02_03_embedding_implementation_notes.md](./02_03_embedding_implementation_notes.md)

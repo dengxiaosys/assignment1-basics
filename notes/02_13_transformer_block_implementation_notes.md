@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_transformer_block`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_transformer_block`
 
-原理背景：Pre-Norm vs Post-Norm 已在 [prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md) 详述并配图，本文聚焦组装。
+原理背景：Pre-Norm vs Post-Norm 已在 [02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md) 详述并配图，本文聚焦组装。
 
 ---
 
@@ -17,8 +17,8 @@
 
 现代 decoder-only Transformer 的每个 block 有**两个子层**，各自包"归一化 + 残差"：
 
-1. **注意力子层**：多头自注意力（[MHA](./multihead_attention_implementation_notes.md)，含 [RoPE](./rope_implementation_notes.md)）；
-2. **前馈子层**：[SwiGLU](./swiglu_implementation_notes.md) FFN。
+1. **注意力子层**：多头自注意力（[MHA](./02_12_multihead_attention_implementation_notes.md)，含 [RoPE](./02_09_rope_implementation_notes.md)）；
+2. **前馈子层**：[SwiGLU](./02_06_swiglu_implementation_notes.md) FFN。
 
 把 $L$ 个这样的 block 叠起来，加上词嵌入和末端输出，就是完整的语言模型。所以 block 是"承上启下"的组装单元——它不引入新算子，只是把已实现的组件按正确结构接起来。
 
@@ -41,7 +41,7 @@ x = x + self.attn(self.ln1(x), token_positions=..., rope=self.rope)
 x = x + self.ffn(self.ln2(x))
 ```
 
-- **为什么 Pre-Norm**：残差路径上没有归一化，梯度可以从顶层几乎无损地直达底层（残差是恒等映射），训练更稳、能堆更深、对学习率和 warmup 更鲁棒。这正是现代 LLM（LLaMA、GPT-NeoX 等）的标准选择，详细梯度分析见 [prenorm 笔记](./prenorm_vs_postnorm_explained.md)。
+- **为什么 Pre-Norm**：残差路径上没有归一化，梯度可以从顶层几乎无损地直达底层（残差是恒等映射），训练更稳、能堆更深、对学习率和 warmup 更鲁棒。这正是现代 LLM（LLaMA、GPT-NeoX 等）的标准选择，详细梯度分析见 [prenorm 笔记](./02_07_prenorm_vs_postnorm_explained.md)。
 - **两个独立的 RMSNorm**：`ln1`、`ln2` 各有自己的可学习增益 $g$（呼应 prenorm 笔记里"每块独立"的结论），不能共用。
 
 ### 2.2 组件复用：block 只负责"接线"
@@ -67,7 +67,7 @@ self.rope = RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
 self.attn(self.ln1(x), token_positions=token_positions, rope=self.rope)
 ```
 
-MHA 的 `forward` 里预留了 `rope` 钩子——拆头后对每个头的 Q/K 施加旋转（见 [MHA 笔记](./multihead_attention_implementation_notes.md) 与 [RoPE 笔记](./rope_implementation_notes.md)）。`token_positions` 缺省时用 `arange(seq)`。
+MHA 的 `forward` 里预留了 `rope` 钩子——拆头后对每个头的 Q/K 施加旋转（见 [MHA 笔记](./02_12_multihead_attention_implementation_notes.md) 与 [RoPE 笔记](./02_09_rope_implementation_notes.md)）。`token_positions` 缺省时用 `arange(seq)`。
 
 ### 2.4 权重键与 `load_state_dict` 直接匹配
 
@@ -138,6 +138,6 @@ uv run pytest -k test_transformer_block
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 原理背景：[prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)（Pre-Norm 为何流行）
-- 组件笔记：[multihead_attention_implementation_notes.md](./multihead_attention_implementation_notes.md)、[swiglu_implementation_notes.md](./swiglu_implementation_notes.md)、[rmsnorm_implementation_notes.md](./rmsnorm_implementation_notes.md)、[rope_implementation_notes.md](./rope_implementation_notes.md)
+- 原理背景：[02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md)（Pre-Norm 为何流行）
+- 组件笔记：[02_12_multihead_attention_implementation_notes.md](./02_12_multihead_attention_implementation_notes.md)、[02_06_swiglu_implementation_notes.md](./02_06_swiglu_implementation_notes.md)、[02_04_rmsnorm_implementation_notes.md](./02_04_rmsnorm_implementation_notes.md)、[02_09_rope_implementation_notes.md](./02_09_rope_implementation_notes.md)
 - 原始文献：Vaswani et al., *Attention Is All You Need*, 2017。

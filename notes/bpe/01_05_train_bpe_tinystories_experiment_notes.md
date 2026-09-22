@@ -2,14 +2,14 @@
 
 ## 0. 本文目标
 
-记录 CS336 assignment1 §2.5 Problem `train_bpe_tinystories` 的**实验实现与结果**：在 TinyStories 全量 train（2.1 GB）上训练一个 vocab_size=10000 的字节级 BPE，序列化产物，并报告耗时/内存/最长 token、做 profile。区别于 [train_bpe 实现笔记](./train_bpe_implementation_notes.md)（讲算法本身），本文聚焦**把算法跑到真实大语料上**要解决的工程问题——尤其是**并行预分词**——以及从实测数据里能读出什么。
+记录 CS336 assignment1 §2.5 Problem `train_bpe_tinystories` 的**实验实现与结果**：在 TinyStories 全量 train（2.1 GB）上训练一个 vocab_size=10000 的字节级 BPE，序列化产物，并报告耗时/内存/最长 token、做 profile。区别于 [train_bpe 实现笔记](./01_04_train_bpe_implementation_notes.md)（讲算法本身），本文聚焦**把算法跑到真实大语料上**要解决的工程问题——尤其是**并行预分词**——以及从实测数据里能读出什么。
 
 对应实际代码：
 - 训练算法（含并行开关）：[cs336_basics/bpe.py](../../cs336_basics/bpe.py) 的 `train_bpe(..., num_processes=)`、`find_chunk_boundaries`、`_pretoken_counts_parallel`
 - 实验脚本：[cs336_basics/train_bpe_experiment.py](../../cs336_basics/train_bpe_experiment.py)
 - 产物：`bpe_out/tinystories/vocab.json`、`bpe_out/tinystories/merges.txt`
 
-前置：[train_bpe 实现笔记](./train_bpe_implementation_notes.md)、[非编码问题](./bpe_conceptual_questions_notes.md) §4（本文的结论也回填到那里）。
+前置：[train_bpe 实现笔记](./01_04_train_bpe_implementation_notes.md)、[非编码问题](./01_03_bpe_conceptual_questions_notes.md) §4（本文的结论也回填到那里）。
 
 ---
 
@@ -55,7 +55,7 @@ b' determination'   (14)
 b' encouragement'   (14)
 ```
 
-**这合理吗？非常合理。** TinyStories 是用 LLM 合成的、面向 3–4 岁儿童的教育故事，用词高度集中且重复，像 `accomplishment`、`understanding`、`Unfortunately`、`determination` 这些"教养/情感"主题的完整长单词高频出现，于是 BPE 把它们整体合并成单个 token。前导空格来自 GPT-2 预分词正则——它把词首空格并入词里（`" accomplishment"` 而非 `"accomplishment"`），所以词表里的完整词大多带一个前导空格。这直接印证了 BPE 的本质：**把语料里高频的字节串压成一个 token**（见 [train_bpe 笔记](./train_bpe_implementation_notes.md) §1）。
+**这合理吗？非常合理。** TinyStories 是用 LLM 合成的、面向 3–4 岁儿童的教育故事，用词高度集中且重复，像 `accomplishment`、`understanding`、`Unfortunately`、`determination` 这些"教养/情感"主题的完整长单词高频出现，于是 BPE 把它们整体合并成单个 token。前导空格来自 GPT-2 预分词正则——它把词首空格并入词里（`" accomplishment"` 而非 `"accomplishment"`），所以词表里的完整词大多带一个前导空格。这直接印证了 BPE 的本质：**把语料里高频的字节串压成一个 token**（见 [train_bpe 笔记](./01_04_train_bpe_implementation_notes.md) §1）。
 
 ---
 
@@ -72,7 +72,7 @@ def find_chunk_boundaries(file, desired_num_chunks, split_special_token):
 ```
 
 - 先按字节大小把文件等分成 N 块，再把每个切点**移动到最近的 `<|endoftext|>` 处**。
-- **为什么必须对齐到 special token**：这样切块**绝不会把一个文档/预 token 劈成两半**。因为合并本来就不跨文档边界（见 [数据加载笔记](../data_loading_implementation_notes.md) 的"文档边界"讨论），在 `<|endoftext|>` 处切，各块独立预分词的计数**加起来和整体预分词完全相同**——分块是无损的。
+- **为什么必须对齐到 special token**：这样切块**绝不会把一个文档/预 token 劈成两半**。因为合并本来就不跨文档边界（见 [数据加载笔记](../03_08_data_loading_implementation_notes.md) 的"文档边界"讨论），在 `<|endoftext|>` 处切，各块独立预分词的计数**加起来和整体预分词完全相同**——分块是无损的。
 
 ### 3.2 怎么并行：多进程各数各的，再合并 Counter
 
@@ -104,7 +104,7 @@ def _pretoken_counts_parallel(input_path, special_tokens, num_processes):
 **读出的关键结论——瓶颈会转移**：
 
 - **并行之前**：预分词是**绝对瓶颈**。它要用 GPT-2 那个带 `\p{L}`/`\p{N}`/负向先行的复杂正则 `re.finditer` **扫过 2.1 GB 全文本**，是一次昂贵的全量字符串遍历；而合并循环只在压缩后的"预 token → 频次"表（去重后仅 ~6 万条）上做。所以 handout 明确建议"并行化预分词"。
-- **并行之后**：预分词被 16 进程分摊，占比降到 44%；**纯 Python、单线程的合并循环**（9743 轮，每轮 `max` 选最优对 + 增量更新，见 [train_bpe 笔记](./train_bpe_implementation_notes.md) §4）反倒成了略大的一头（56%）。
+- **并行之后**：预分词被 16 进程分摊，占比降到 44%；**纯 Python、单线程的合并循环**（9743 轮，每轮 `max` 选最优对 + 增量更新，见 [train_bpe 笔记](./01_04_train_bpe_implementation_notes.md) §4）反倒成了略大的一头（56%）。
 - **启示**：优化要**跟着瓶颈走**。第一步优化预分词（并行）收益最大；并行后若想再快，得优化合并循环——例如用**堆/优先队列**维护"当前最大频次对"（省去每轮 `max` 的线性扫描），或把合并核心用 Rust/C++ 重写（handout 提到的 PyO3/nanobind 路线）。对本作业 2.6 分钟已达标，无需再优化。
 
 > 为什么合并循环即便"增量更新"过仍占一半：增量更新省掉的是"每轮重扫全语料重建 pair 计数"，但**每轮仍要 `max` 遍历一次当前所有相邻对**（pair 种类可能上万），9743 轮累积起来就不小。堆能把这块的每轮成本从 O(pairs) 降到 O(log)。
@@ -118,12 +118,12 @@ def _pretoken_counts_parallel(input_path, special_tokens, num_processes):
 - **`vocab.json`**（≈161 KB）：`{token_str: id}`，用 GPT-2 的"字节→可打印字符"映射（`gpt2_bytes_to_unicode_safe`）把 bytes 编码成可读、可往返的字符串。
 - **`merges.txt`**（≈83 KB）：每行 `tok1 tok2`，按创建顺序。
 
-> **别被 `vocab.json` 里的 `Ġ` / `Ċ` 吓到**：打开会看到 `Ġnamed`、`Ġfriends`、`ĠLily` 这类字符，它们**不是非英文 token**——`Ġ` 是**空格**（`0x20`）的可打印替身、`Ċ` 是**换行**（`0x0A`）的替身。即磁盘上的 `"Ġnamed"` 就是真实 token `b' named'`（带前导空格的 named）。这是 GPT-2 为把"含空白字节的字节级 token"无损存成文本而定义的可逆编码，加载时会还原成真实字节。详见 [Tokenizer 笔记](./tokenizer_implementation_notes.md) §2 的说明。（本文 §2 展示最长 token 用的是 `b' accomplishment'` 这种**真实字节形式**，在 vocab.json 里则显示为 `Ġaccomplishment`。）
+> **别被 `vocab.json` 里的 `Ġ` / `Ċ` 吓到**：打开会看到 `Ġnamed`、`Ġfriends`、`ĠLily` 这类字符，它们**不是非英文 token**——`Ġ` 是**空格**（`0x20`）的可打印替身、`Ċ` 是**换行**（`0x0A`）的替身。即磁盘上的 `"Ġnamed"` 就是真实 token `b' named'`（带前导空格的 named）。这是 GPT-2 为把"含空白字节的字节级 token"无损存成文本而定义的可逆编码，加载时会还原成真实字节。详见 [Tokenizer 笔记](./01_06_tokenizer_implementation_notes.md) §2 的说明。（本文 §2 展示最长 token 用的是 `b' accomplishment'` 这种**真实字节形式**，在 vocab.json 里则显示为 `Ġaccomplishment`。）
 
 这套产物可被 [Tokenizer.from_files](../../cs336_basics/bpe.py) 直接加载（已验证能正常 encode/decode），供接下来的实验使用：
 
-- `tokenizer_experiments`：用它算 TinyStories 的压缩率（bytes/token）、跨域编码等（见 [非编码问题](./bpe_conceptual_questions_notes.md) §6）；
-- 用 [训练脚本](../training_loop_implementation_notes.md) 把 TinyStories 编码成 token 数组，真正训练一个语言模型。
+- `tokenizer_experiments`：用它算 TinyStories 的压缩率（bytes/token）、跨域编码等（见 [非编码问题](./01_03_bpe_conceptual_questions_notes.md) §6）；
+- 用 [训练脚本](../03_10_training_loop_implementation_notes.md) 把 TinyStories 编码成 token 数组，真正训练一个语言模型。
 
 ---
 
@@ -140,5 +140,5 @@ def _pretoken_counts_parallel(input_path, special_tokens, num_processes):
 
 - 训练算法与并行：[cs336_basics/bpe.py](../../cs336_basics/bpe.py)
 - 实验脚本：[cs336_basics/train_bpe_experiment.py](../../cs336_basics/train_bpe_experiment.py)
-- 相关笔记：[train_bpe 实现](./train_bpe_implementation_notes.md)、[Tokenizer 实现](./tokenizer_implementation_notes.md)、[非编码问题](./bpe_conceptual_questions_notes.md)、[数据加载](../data_loading_implementation_notes.md)
-- handout：[cs336_assignment1_basics_extracted.md](../cs336_assignment1_basics_extracted.md) §2.5（`train_bpe_tinystories`）
+- 相关笔记：[train_bpe 实现](./01_04_train_bpe_implementation_notes.md)、[Tokenizer 实现](./01_06_tokenizer_implementation_notes.md)、[非编码问题](./01_03_bpe_conceptual_questions_notes.md)、[数据加载](../03_08_data_loading_implementation_notes.md)
+- handout：[00_01_cs336_assignment1_basics_extracted.md](../00_01_cs336_assignment1_basics_extracted.md) §2.5（`train_bpe_tinystories`）

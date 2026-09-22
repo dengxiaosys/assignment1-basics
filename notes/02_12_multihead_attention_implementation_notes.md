@@ -9,13 +9,13 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_multihead_self_attention`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_multihead_self_attention`
 
-依赖前置：[SDPA 笔记](./attention_implementation_notes.md)（核心打分）、[Linear 笔记](./linear_implementation_notes.md)（四个投影）、[softmax 笔记](./softmax_implementation_notes.md)。
+依赖前置：[SDPA 笔记](./02_11_attention_implementation_notes.md)（核心打分）、[Linear 笔记](./02_02_linear_implementation_notes.md)（四个投影）、[softmax 笔记](./02_10_softmax_implementation_notes.md)。
 
 ---
 
 ## 1. 背景：为什么要"多头"
 
-单个注意力（[SDPA](./attention_implementation_notes.md)）只能学到一种"关注模式"。**多头**的想法是：把 `d_model` 维切成 `num_heads` 份，每份 `head_dim = d_model / num_heads`，**每个头在自己的低维子空间里独立做一次注意力**，最后把各头结果拼起来再投影。
+单个注意力（[SDPA](./02_11_attention_implementation_notes.md)）只能学到一种"关注模式"。**多头**的想法是：把 `d_model` 维切成 `num_heads` 份，每份 `head_dim = d_model / num_heads`，**每个头在自己的低维子空间里独立做一次注意力**，最后把各头结果拼起来再投影。
 
 好处：不同头可以学到不同关系——有的头关注相邻词、有的关注句法主谓、有的关注远距离指代。多头让模型在**同一层里并行捕捉多种依赖**，且总计算量与单头相当（维度被切分了）。
 
@@ -67,9 +67,9 @@ $$ \mathrm{MHA}(X) = \mathrm{Concat}(\text{head}_1,\dots,\text{head}_h)\, W_O^\t
 
 ### 2.2 四个投影用子 `Linear`
 
-`__init__` 里建 `q_proj/k_proj/v_proj/output_proj` 四个 `Linear(d_model, d_model)`。理由同 [SwiGLU](./swiglu_implementation_notes.md)：复用已验证的无 bias `Linear`、参数自动登记、`state_dict` 键为 `q_proj.weight` 等与官方命名一致，adapter 用 `load_state_dict` 直接装参考权重。
+`__init__` 里建 `q_proj/k_proj/v_proj/output_proj` 四个 `Linear(d_model, d_model)`。理由同 [SwiGLU](./02_06_swiglu_implementation_notes.md)：复用已验证的无 bias `Linear`、参数自动登记、`state_dict` 键为 `q_proj.weight` 等与官方命名一致，adapter 用 `load_state_dict` 直接装参考权重。
 
-> 呼应 [nn_module 笔记 2.4 的原则](./nn_module_and_linear_explained.md)：MHA 有可学习参数（四个投影），所以写成 `nn.Module` 类；而它内部调用的 SDPA/softmax 是无状态纯函数。
+> 呼应 [nn_module 笔记 2.4 的原则](./02_01_nn_module_and_linear_explained.md)：MHA 有可学习参数（四个投影），所以写成 `nn.Module` 类；而它内部调用的 SDPA/softmax 是无状态纯函数。
 
 ### 2.3 "单次大矩阵投影 + 拆头"
 
@@ -84,7 +84,7 @@ def split_heads(t):
 
 - **一次投影**：`q_proj(x)` 对全 `d_model` 一次算完，等价于所有头的 Q 拼在一起，比逐头小矩阵乘高效；
 - **reshape 拆头**：把最后的 `d_model` 维拆成 `(num_heads, head_dim)`；
-- **transpose(-3,-2)**：把 `num_heads` 提到 `seq` 前面，得 `(..., num_heads, seq, head_dim)`。这样 `num_heads` 变成"批量维"，SDPA 的 `...` 会自动对每个头并行处理（正是 [SDPA 笔记](./attention_implementation_notes.md) 里 4D 场景验证过的）。
+- **transpose(-3,-2)**：把 `num_heads` 提到 `seq` 前面，得 `(..., num_heads, seq, head_dim)`。这样 `num_heads` 变成"批量维"，SDPA 的 `...` 会自动对每个头并行处理（正是 [SDPA 笔记](./02_11_attention_implementation_notes.md) 里 4D 场景验证过的）。
 
 下图展示这两步的张量形状变换：
 
@@ -99,7 +99,7 @@ def split_heads(t):
 >
 > 所以 transpose 不是性能优化，而是**决定注意力发生在哪个维度**。想不 transpose 也行，但要换等价写法（如用 `einsum` 显式指定维度，或把 head 并进 batch）——本质都是"让 SDPA 在正确的维度上操作"，当前 `reshape+transpose` 是最清晰的标准写法。
 
-> **为什么调用 `scaled_dot_product_attention(Q, K, V, mask)` 时不用告诉它"这是多头"？** 因为 SDPA 的接口就是"**只认最后两维 `(seq, feat)`，其余一律当批量维**"（见 [SDPA 笔记](./attention_implementation_notes.md) 的 `...` 写法）。它对批量维里究竟是 batch、还是 head、还是 batch×head 完全**无感知、也不关心**——每个批量位置各算各的，互不影响。
+> **为什么调用 `scaled_dot_product_attention(Q, K, V, mask)` 时不用告诉它"这是多头"？** 因为 SDPA 的接口就是"**只认最后两维 `(seq, feat)`，其余一律当批量维**"（见 [SDPA 笔记](./02_11_attention_implementation_notes.md) 的 `...` 写法）。它对批量维里究竟是 batch、还是 head、还是 batch×head 完全**无感知、也不关心**——每个批量位置各算各的，互不影响。
 >
 > 正因如此，MHA 只需在调用**之前**用 transpose 把 `num_heads` 挪进批量维（变成 `(.., num_heads, seq, head_dim)`），SDPA 就会**自动对每个头独立并行**做注意力，无需任何"多头"参数或分支逻辑。这是一种干净的**关注点分离**：
 >
@@ -228,6 +228,6 @@ uv run pytest -k "test_multihead_self_attention and not rope"
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 依赖：[attention_implementation_notes.md](./attention_implementation_notes.md)（SDPA）、[linear_implementation_notes.md](./linear_implementation_notes.md)、[softmax_implementation_notes.md](./softmax_implementation_notes.md)
-- 设计原则：[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)（何时用类）
+- 依赖：[02_11_attention_implementation_notes.md](./02_11_attention_implementation_notes.md)（SDPA）、[02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)、[02_10_softmax_implementation_notes.md](./02_10_softmax_implementation_notes.md)
+- 设计原则：[02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)（何时用类）
 - 原始文献：Vaswani et al., *Attention Is All You Need*, 2017（§3.2.2 Multi-Head Attention）。

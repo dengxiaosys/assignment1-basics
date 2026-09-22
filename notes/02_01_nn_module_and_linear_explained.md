@@ -242,7 +242,7 @@ assignment1 要求：实现一个继承 `nn.Module`、遵循 `nn.Linear` 接口�
 
 ## 5. 它如何被测试连起来（呼应 pytest 笔记）
 
-回顾配套的 [pytest_fixtures_explained.md](./pytest_fixtures_explained.md)：`test_linear` 通过 `run_linear` 适配器调用你的实现，再用 `numpy_snapshot` 和参考快照比对。因此你的 `Linear` 只要满足第 4 节的约束、数值上与参考一致，测试就会通过。这条链是：
+回顾配套的 [00_03_pytest_fixtures_explained.md](./00_03_pytest_fixtures_explained.md)：`test_linear` 通过 `run_linear` 适配器调用你的实现，再用 `numpy_snapshot` 和参考快照比对。因此你的 `Linear` 只要满足第 4 节的约束、数值上与参考一致，测试就会通过。这条链是：
 
 ```text
 test_linear → adapters.run_linear → 你的 Linear(nn.Module 子类) → 输出
@@ -266,4 +266,4 @@ test_linear → adapters.run_linear → 你的 Linear(nn.Module 子类) → 输�
 - PyTorch 文档：`torch.nn.Module`（`https://pytorch.org/docs/stable/generated/torch.nn.Module.html`）
 - PyTorch 文档：`torch.nn.Linear`（`https://pytorch.org/docs/stable/generated/torch.nn.Linear.html`）
 - 本仓库：[tests/adapters.py](../tests/adapters.py)、[tests/test_model.py](../tests/test_model.py)
-- 配套笔记：[pytest_fixtures_explained.md](./pytest_fixtures_explained.md)、[prenorm_vs_postnorm_explained.md](./prenorm_vs_postnorm_explained.md)
+- 配套笔记：[00_03_pytest_fixtures_explained.md](./00_03_pytest_fixtures_explained.md)、[02_07_prenorm_vs_postnorm_explained.md](./02_07_prenorm_vs_postnorm_explained.md)

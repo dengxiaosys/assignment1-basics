@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_save_checkpoint` / `run_load_checkpoint`
 - 测试：[tests/test_serialization.py](../tests/test_serialization.py) 的 `test_checkpointing`
 
-前置：[优化器 API 笔记](./pytorch_optimizer_api_notes.md)（`self.state`、`state_dict()`）、[AdamW 笔记](./adamw_implementation_notes.md)（一阶/二阶矩是"状态"）。
+前置：[优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md)（`self.state`、`state_dict()`）、[AdamW 笔记](./03_04_adamw_implementation_notes.md)（一阶/二阶矩是"状态"）。
 
 ---
 
@@ -23,7 +23,7 @@
 
 ## 2. 核心问题：恢复训练需要存哪三样
 
-一个训练步是 `zero_grad → forward → backward → step`（见 [优化器 API 笔记](./pytorch_optimizer_api_notes.md)）。要让"下一步"可复现，必须恢复这一步开始前的全部持久状态：
+一个训练步是 `zero_grad → forward → backward → step`（见 [优化器 API 笔记](./03_02_pytorch_optimizer_api_notes.md)）。要让"下一步"可复现，必须恢复这一步开始前的全部持久状态：
 
 ### 2.1 模型权重 `model.state_dict()`——显然要存
 
@@ -31,7 +31,7 @@
 
 ### 2.2 优化器状态 `optimizer.state_dict()`——最容易被漏掉的一样
 
-**这是初学者最常忘的**。以为"存了权重就行"，但 AdamW 这类**有状态优化器**在 `self.state` 里为每个参数维护了跨步累积的量：一阶矩 $m$、二阶矩 $v$、步数 $t$（见 [AdamW 笔记](./adamw_implementation_notes.md)）。这些**不在 `model` 里，在 `optimizer` 里**。
+**这是初学者最常忘的**。以为"存了权重就行"，但 AdamW 这类**有状态优化器**在 `self.state` 里为每个参数维护了跨步累积的量：一阶矩 $m$、二阶矩 $v$、步数 $t$（见 [AdamW 笔记](./03_04_adamw_implementation_notes.md)）。这些**不在 `model` 里，在 `optimizer` 里**。
 
 为什么必须存？AdamW 的更新依赖偏差校正 $\hat m = m/(1-\beta_1^t)$、$\hat v = v/(1-\beta_2^t)$，以及自适应缩放 $\propto m/\sqrt{v}$。如果恢复时把 $m, v, t$ 全清零，相当于优化器"失忆"从头开始——动量丢了、自适应学习率的分母重置、偏差校正的 $t$ 归零，恢复后的更新方向和步长都和中断前对不上，训练会抖动甚至变差。
 
@@ -41,7 +41,7 @@
 
 已经训了多少步。为什么要存？
 
-- **学习率调度**：cosine schedule 的当前 lr 是 `t` 的函数（见 [LR schedule 笔记](./lr_schedule_implementation_notes.md)），续训必须知道"现在是第几步"才能接着算对 lr；
+- **学习率调度**：cosine schedule 的当前 lr 是 `t` 的函数（见 [LR schedule 笔记](./03_06_lr_schedule_implementation_notes.md)），续训必须知道"现在是第几步"才能接着算对 lr；
 - **循环控制**：知道从第几步继续、还要跑到几步；
 - **日志/评估节奏**：按步数触发。
 
@@ -95,7 +95,7 @@ def load_checkpoint(src, model, optimizer):
 
 ### 4.1 对本作业：存这三样是**够且正确**的
 
-`test_checkpointing` 只验证 model 权重、optimizer 状态、iteration 三者能否恢复（见 §6）。而且这里的学习率调度是**无状态的纯函数** `get_lr_cosine_schedule(t, ...)`（见 [LR schedule 笔记](./lr_schedule_implementation_notes.md)）——它的"当前 lr"完全由传入的 `t` 决定，不在任何对象里藏状态。所以只要存了 `iteration`，续训时把它当 `t` 传进去就能算对 lr，**不需要单独存 scheduler**。对 CS336 的规模（单卡、fp32、数据可从头随机采），这三样确实覆盖了"下一步可复现"的全部持久状态。
+`test_checkpointing` 只验证 model 权重、optimizer 状态、iteration 三者能否恢复（见 §6）。而且这里的学习率调度是**无状态的纯函数** `get_lr_cosine_schedule(t, ...)`（见 [LR schedule 笔记](./03_06_lr_schedule_implementation_notes.md)）——它的"当前 lr"完全由传入的 `t` 决定，不在任何对象里藏状态。所以只要存了 `iteration`，续训时把它当 `t` 传进去就能算对 lr，**不需要单独存 scheduler**。对 CS336 的规模（单卡、fp32、数据可从头随机采），这三样确实覆盖了"下一步可复现"的全部持久状态。
 
 ### 4.2 对工业级"完全可复现续训"：通常还要多存几样
 
@@ -109,7 +109,7 @@ def load_checkpoint(src, model, optimizer):
 | **数据加载进度**（epoch、样本指针 / sampler 状态） | 要精确"接着上次的数据"往下喂，而非从头 | 恢复后数据顺序变，可能重复/跳过样本 |
 | **训练元信息**（当前 loss/best metric、超参、代码/config 版本、`torch`/CUDA 版本） | 便于比较、早停、审计、排查"换环境后结果变了" | 难以复盘和对齐 |
 
-**为什么本作业能省掉这些**：LR 是纯函数（靠 iteration 重算）、没用 dropout 之类强 RNG 依赖的复现要求、fp32 无 GradScaler、数据是每步独立随机采（`get_batch` 无"进度"概念，见 [数据加载笔记](./data_loading_implementation_notes.md)）。所以这些项要么不存在、要么可由 `iteration` 间接恢复。
+**为什么本作业能省掉这些**：LR 是纯函数（靠 iteration 重算）、没用 dropout 之类强 RNG 依赖的复现要求、fp32 无 GradScaler、数据是每步独立随机采（`get_batch` 无"进度"概念，见 [数据加载笔记](./03_08_data_loading_implementation_notes.md)）。所以这些项要么不存在、要么可由 `iteration` 间接恢复。
 
 ### 4.3 业界范式确实如此吗？
 
@@ -213,5 +213,5 @@ uv run pytest -k test_checkpointing
 - 本仓库实现：[cs336_basics/checkpoint.py](../cs336_basics/checkpoint.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_serialization.py](../tests/test_serialization.py)
-- 前置：[pytorch_optimizer_api_notes.md](./pytorch_optimizer_api_notes.md)（`self.state` / `state_dict`）、[adamw_implementation_notes.md](./adamw_implementation_notes.md)（$m,v,t$ 是状态）、[lr_schedule_implementation_notes.md](./lr_schedule_implementation_notes.md)（lr 依赖迭代数）
+- 前置：[03_02_pytorch_optimizer_api_notes.md](./03_02_pytorch_optimizer_api_notes.md)（`self.state` / `state_dict`）、[03_04_adamw_implementation_notes.md](./03_04_adamw_implementation_notes.md)（$m,v,t$ 是状态）、[03_06_lr_schedule_implementation_notes.md](./03_06_lr_schedule_implementation_notes.md)（lr 依赖迭代数）
 - PyTorch 文档：`torch.save` / `torch.load` / `nn.Module.load_state_dict`（`https://pytorch.org/docs/stable/notes/serialization.html`）

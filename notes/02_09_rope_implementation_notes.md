@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_rope`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_rope`
 
-RoPE 的**原理与背景**（为什么旋转能编码相对位置、在 LLM 中的位置、多频率、长上下文扩展、与其它位置编码对比）已在 [rope_explained.md](./rope_explained.md) 详述并配图，本文聚焦实现。
+RoPE 的**原理与背景**（为什么旋转能编码相对位置、在 LLM 中的位置、多频率、长上下文扩展、与其它位置编码对比）已在 [02_08_rope_explained.md](./02_08_rope_explained.md) 详述并配图，本文聚焦实现。
 
 ---
 
@@ -56,10 +56,10 @@ self.register_buffer("sin_cached", torch.sin(angles), persistent=False)
 ```
 
 - **预缓存**：角度只依赖位置和频率，与输入内容无关，所以可以在 `__init__` 里一次算好 cos/sin，forward 时按位置**查表**即可，省去每次重算三角函数；
-- **用 `register_buffer` 而非 `nn.Parameter`**：cos/sin 是**不可学习**的常量——RoPE 没有可训练参数。buffer 会随模型 `.to(device)`、进 `state_dict`，但**不被优化器更新**（见 [nn_module 笔记](./nn_module_and_linear_explained.md) 的登记规则）；
+- **用 `register_buffer` 而非 `nn.Parameter`**：cos/sin 是**不可学习**的常量——RoPE 没有可训练参数。buffer 会随模型 `.to(device)`、进 `state_dict`，但**不被优化器更新**（见 [nn_module 笔记](./02_01_nn_module_and_linear_explained.md) 的登记规则）；
 - **`persistent=False`**：这些缓存可由 `theta/d_k/max_seq_len` 完全重建，不必写进 `state_dict`，避免和外部权重加载冲突、也减小 checkpoint。
 
-> 呼应 [prenorm 笔记](./prenorm_vs_postnorm_explained.md) 的一个对照：RMSNorm 的增益 $g$ 是**可学习、每块独立**的 `Parameter`；RoPE 的频率/角度是**不可学习、全局共享**的 `buffer`。可学习性与共享范围恰好相反。
+> 呼应 [prenorm 笔记](./02_07_prenorm_vs_postnorm_explained.md) 的一个对照：RMSNorm 的增益 $g$ 是**可学习、每块独立**的 `Parameter`；RoPE 的频率/角度是**不可学习、全局共享**的 `buffer`。可学习性与共享范围恰好相反。
 
 ### 2.4 `forward`：按位置查表 + 相邻配对旋转
 
@@ -96,7 +96,7 @@ out[..., 1::2] = out_odd
 
 **Q2：不同层的 theta 通常会不同吗？**
 
-通常**不会**——绝大多数主流模型（LLaMA、GPT-NeoX、Qwen 等）**所有层共享同一个 theta（base）**。RoPE 虽然在每一层都重新施加旋转（见 [rope 笔记 4.2](./rope_explained.md)），但每层用的是**同一套频率公式、同一个 base**，即"每层都转，但转法一样"。
+通常**不会**——绝大多数主流模型（LLaMA、GPT-NeoX、Qwen 等）**所有层共享同一个 theta（base）**。RoPE 虽然在每一层都重新施加旋转（见 [rope 笔记 4.2](./02_08_rope_explained.md)），但每层用的是**同一套频率公式、同一个 base**，即"每层都转，但转法一样"。
 
 - **为什么不用层间不同**：位置的物理含义（第几个 token、相距多远）不随层变化，用同一套频率最自然、也最省参数与调参成本；
 - **长上下文扩展**（PI / NTK / YaRN）会调整频率，但通常是**对所有层做同一种调整**，而不是让层与层之间用不同 base；
@@ -160,5 +160,5 @@ uv run pytest -k test_rope
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 原理背景：[rope_explained.md](./rope_explained.md)（旋转编码相对位置、多频率、长上下文扩展、与其它位置编码对比）
-- 配套：[nn_module_and_linear_explained.md](./nn_module_and_linear_explained.md)、[rmsnorm_implementation_notes.md](./rmsnorm_implementation_notes.md)
+- 原理背景：[02_08_rope_explained.md](./02_08_rope_explained.md)（旋转编码相对位置、多频率、长上下文扩展、与其它位置编码对比）
+- 配套：[02_01_nn_module_and_linear_explained.md](./02_01_nn_module_and_linear_explained.md)、[02_04_rmsnorm_implementation_notes.md](./02_04_rmsnorm_implementation_notes.md)

@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_silu`、`run_swiglu`
 - 测试：[tests/test_model.py](../tests/test_model.py) 的 `test_silu_matches_pytorch`、`test_swiglu`
 
-SwiGLU/GLU 的**原理与背景**（为什么门控、为什么是 FFN 的位置、2/3 缩放等）已在 [glu_explained.md](./glu_explained.md) 详述，本文聚焦实现，原理只做必要回顾。
+SwiGLU/GLU 的**原理与背景**（为什么门控、为什么是 FFN 的位置、2/3 缩放等）已在 [02_05_glu_explained.md](./02_05_glu_explained.md) 详述，本文聚焦实现，原理只做必要回顾。
 
 ---
 
@@ -72,7 +72,7 @@ $$ \mathrm{SwiGLU}(x) = W_2\big(\underbrace{\mathrm{SiLU}(W_1 x)}_{\text{门}} \
 
 **为什么"多一个 $W_3$、改成乘法"就更强？** 关键是 $W_1 x$ 与 $W_3 x$ 的**乘性交互**：门支路 $\mathrm{SiLU}(W_1 x)$ 逐通道地决定"值支路 $W_3 x$ 的每个通道放行多少"。这让网络能表达"**当某特征出现时才让另一特征通过**"这类条件逻辑——标准 FFN 只有加性组合 + 固定激活，做不到这种输入依赖的动态门控。
 
-**代价**：多一个矩阵会多约 50% 的 FFN 参数，所以工程上把中间维 $d_{ff}$ 缩到约 $\tfrac{2}{3}$，让 SwiGLU 与标准 FFN 在**相同参数/算力预算**下比较——这才公平，也正是 LLaMA 等模型 $d_{ff}$ 不是整齐 $4d$ 的原因。（更完整的推导见 [glu_explained.md](./glu_explained.md)，但上面已足够理解本实现。）
+**代价**：多一个矩阵会多约 50% 的 FFN 参数，所以工程上把中间维 $d_{ff}$ 缩到约 $\tfrac{2}{3}$，让 SwiGLU 与标准 FFN 在**相同参数/算力预算**下比较——这才公平，也正是 LLaMA 等模型 $d_{ff}$ 不是整齐 $4d$ 的原因。（更完整的推导见 [02_05_glu_explained.md](./02_05_glu_explained.md)，但上面已足够理解本实现。）
 
 > 记号（仓库规则 R1/R2）：数学上以列向量记 $W_1 x$；PyTorch 中特征在最后一维、实现为 $x W_1^\top$。下面用 `Linear` 封装，二者自动对上。
 
@@ -88,14 +88,14 @@ $$ \mathrm{SwiGLU}(x) = W_2\big(\underbrace{\mathrm{SiLU}(W_1 x)}_{\text{门}} \
 | `w3` | `(d_ff, d_model)` | 值支路升维 | `Linear(d_model, d_ff)` |
 | `w2` | `(d_model, d_ff)` | 降维回 d_model | `Linear(d_ff, d_model)` |
 
-关键点：`Linear` 的 weight 形状是 `(d_out, d_in)`（见 [linear 笔记](./linear_implementation_notes.md)），恰好与 handout 给的 `w1/w2/w3` 形状**一一对应**——所以能直接用三个 `Linear` 拼，无需任何转置。
+关键点：`Linear` 的 weight 形状是 `(d_out, d_in)`（见 [linear 笔记](./02_02_linear_implementation_notes.md)），恰好与 handout 给的 `w1/w2/w3` 形状**一一对应**——所以能直接用三个 `Linear` 拼，无需任何转置。
 
 ### 2.2 用 `Linear` 复用，而不是裸 `nn.Parameter`
 
 `SwiGLU` 内部声明三个子模块 `self.w1/w2/w3 = Linear(...)`。好处：
 
 1. **复用已验证的 `Linear`**（含无 bias、$xW^\top$、autograd）；
-2. 子模块的参数自动登记为 `SwiGLU` 的参数（`nn.Module` 树，见 [nn_module 笔记](./nn_module_and_linear_explained.md)）；
+2. 子模块的参数自动登记为 `SwiGLU` 的参数（`nn.Module` 树，见 [nn_module 笔记](./02_01_nn_module_and_linear_explained.md)）；
 3. `state_dict` 的键自然是 `w1.weight`、`w2.weight`、`w3.weight`——与官方权重命名一致，加载不用改名。
 
 ### 2.3 `forward` 一行
@@ -112,7 +112,7 @@ return self.w2(silu(self.w1(x)) * self.w3(x))
 
 ### 2.5 是否手写 backward
 
-不需要。`sigmoid`、乘法、以及 `Linear` 内部的矩阵乘都是可微算子，autograd 自动求导（同 [linear 笔记 2.6](./linear_implementation_notes.md)）。
+不需要。`sigmoid`、乘法、以及 `Linear` 内部的矩阵乘都是可微算子，autograd 自动求导（同 [linear 笔记 2.6](./02_02_linear_implementation_notes.md)）。
 
 ---
 
@@ -164,5 +164,5 @@ uv run pytest -k "test_swiglu or test_silu"
 - 本仓库实现：[cs336_basics/model.py](../cs336_basics/model.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_model.py](../tests/test_model.py)
-- 原理背景：[glu_explained.md](./glu_explained.md)（GLU/SwiGLU 门控原理、FFN 位置、2/3 缩放）
-- 配套：[linear_implementation_notes.md](./linear_implementation_notes.md)、[rmsnorm_implementation_notes.md](./rmsnorm_implementation_notes.md)
+- 原理背景：[02_05_glu_explained.md](./02_05_glu_explained.md)（GLU/SwiGLU 门控原理、FFN 位置、2/3 缩放）
+- 配套：[02_02_linear_implementation_notes.md](./02_02_linear_implementation_notes.md)、[02_04_rmsnorm_implementation_notes.md](./02_04_rmsnorm_implementation_notes.md)

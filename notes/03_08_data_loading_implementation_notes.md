@@ -9,7 +9,7 @@
 - 接线：[tests/adapters.py](../tests/adapters.py) 的 `run_get_batch`
 - 测试：[tests/test_data.py](../tests/test_data.py) 的 `test_get_batch`
 
-前置：[交叉熵笔记](./cross_entropy_implementation_notes.md)（$D$/batch/seq 维度、下一 token 预测）。
+前置：[交叉熵笔记](./03_01_cross_entropy_implementation_notes.md)（$D$/batch/seq 维度、下一 token 预测）。
 
 ---
 
@@ -17,7 +17,7 @@
 
 BPE tokenizer 把整个语料编码成**一长串 token id**（一维数组，可能上亿个）。训练时不可能一次喂全部，而是每步随机截取若干段定长片段组成一个 batch。`get_batch` 就干这件事：**从 1D token 数组里随机采 `batch_size` 段、每段长 `context_length`，并配好"下一个 token"标签。**
 
-**为什么标签是输入右移一位**：语言模型是**自回归**的，每个位置要预测**下一个** token（见 [交叉熵笔记](./cross_entropy_implementation_notes.md)）。所以：
+**为什么标签是输入右移一位**：语言模型是**自回归**的，每个位置要预测**下一个** token（见 [交叉熵笔记](./03_01_cross_entropy_implementation_notes.md)）。所以：
 
 ```text
 dataset:  ... [t_i, t_{i+1}, t_{i+2}, ..., t_{i+ctx-1}, t_{i+ctx}] ...
@@ -145,4 +145,4 @@ uv run pytest -k test_get_batch
 - 本仓库实现：[cs336_basics/data.py](../cs336_basics/data.py)
 - 适配层：[tests/adapters.py](../tests/adapters.py)
 - 测试：[tests/test_data.py](../tests/test_data.py)
-- 前置：[cross_entropy_implementation_notes.md](./cross_entropy_implementation_notes.md)（下一 token 预测、batch/seq 维度）
+- 前置：[03_01_cross_entropy_implementation_notes.md](./03_01_cross_entropy_implementation_notes.md)（下一 token 预测、batch/seq 维度）
