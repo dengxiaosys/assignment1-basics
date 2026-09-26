@@ -72,6 +72,9 @@ BPE 笔记集中在 [`bpe/`](./bpe/) 子目录：
 ## 90 运维附录
 
 1. [90_01 跨机开发：B 上开发、C 上使用 GPU](./90_01_cross_machine_dev_B_to_C_gpu_guide.md)
+2. [90_02 反向 SSH 隧道原理](./90_02_reverse_ssh_tunnel_explained.md)
+3. [90_03 rsync 增量部署与 SSH 远程执行](./90_03_rsync_remote_gpu_execution_guide.md)
+4. [90_04 Assignment 2 远程 GPU 部署与运行方案](./90_04_assignment2_remote_gpu_execution_plan.md)
 
 ## 建议路线
 
