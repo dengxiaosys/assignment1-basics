@@ -51,6 +51,7 @@ BPE 笔记集中在 [`bpe/`](./bpe/) 子目录：
 13. [02_13 Transformer Block 实现](./02_13_transformer_block_implementation_notes.md)
 14. [02_14 TransformerLM 实现](./02_14_transformer_lm_implementation_notes.md)
 15. [02_15 Transformer 资源核算](./02_15_transformer_resource_accounting_notes.md)
+16. [02_16 Attention 对称性、排列等变性与位置编码](./02_16_attention_symmetry_permutation_equivariance_and_position_encoding.md)
 
 ## 03 损失、优化与训练
 
@@ -75,10 +76,11 @@ BPE 笔记集中在 [`bpe/`](./bpe/) 子目录：
 2. [90_02 反向 SSH 隧道原理](./90_02_reverse_ssh_tunnel_explained.md)
 3. [90_03 rsync 增量部署与 SSH 远程执行](./90_03_rsync_remote_gpu_execution_guide.md)
 4. [90_04 Assignment 2 远程 GPU 部署与运行方案](./90_04_assignment2_remote_gpu_execution_plan.md)
+5. [90_05 Trae Remote Agent 通过 Mac A 网络访问模型服务](./90_05_trae_remote_agent_network_via_mac.md)
 
 ## 建议路线
 
 - **先跑通课程主线**：`00_02 → 00_03 → 01 → 02 → 03 → 04`
-- **只学习 Transformer 模型**：`02_01 → 02_15`
+- **只学习 Transformer 模型**：`02_01 → 02_16`
 - **只学习训练系统**：`03_01 → 03_10`
 - **查具体实现**：直接按编号定位对应实现笔记，再跟随文档中的代码链接。
