@@ -152,6 +152,14 @@ apply_config() {
     verify_proxy
     touch "$PROFILE_PATH"
     validate_marker_state
+
+    if profile_is_configured; then
+        log "profile_status=already_configured"
+        log "proxy_url=$PROXY_URL"
+        log "a_source_ip=$A_SOURCE_IP"
+        return
+    fi
+
     TEMP_PROFILE="$(mktemp "$HOME/.profile.trae-proxy.XXXXXX")"
 
     write_profile_without_proxy_block "$TEMP_PROFILE"
@@ -219,7 +227,85 @@ restart_trae() {
 profile_is_configured() {
     grep -Fqx "$START_MARKER" "$PROFILE_PATH" 2>/dev/null &&
         grep -Fqx "$END_MARKER" "$PROFILE_PATH" 2>/dev/null &&
-        grep -Fq "_trae_proxy=\"$PROXY_URL\"" "$PROFILE_PATH"
+        grep -Fq "    $A_SOURCE_IP\\ *)" "$PROFILE_PATH" &&
+        grep -Fq "_trae_proxy=\"$PROXY_URL\"" "$PROFILE_PATH" &&
+        grep -Fq "export NO_PROXY=\"$NO_PROXY_VALUE\"" "$PROFILE_PATH"
+}
+
+ai_agent_pid() {
+    pgrep -f '/modules/ai-agent/ai-agent$' | head -n 1 || true
+}
+
+ai_agent_uses_expected_proxy() {
+    local agent_env
+    local pid="$1"
+    local variable
+
+    agent_env="$(tr '\0' '\n' <"/proc/$pid/environ")"
+    for variable in \
+        HTTP_PROXY HTTPS_PROXY ALL_PROXY \
+        http_proxy https_proxy all_proxy; do
+        printf '%s\n' "$agent_env" |
+            grep -Fqx "$variable=$PROXY_URL" ||
+            return 1
+    done
+}
+
+ai_agent_has_managed_proxy() {
+    local agent_env
+    local pid="$1"
+    local variable
+
+    agent_env="$(tr '\0' '\n' <"/proc/$pid/environ")"
+    for variable in \
+        HTTP_PROXY HTTPS_PROXY ALL_PROXY \
+        http_proxy https_proxy all_proxy; do
+        if printf '%s\n' "$agent_env" |
+            grep -Fqx "$variable=$PROXY_URL"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_enabled() {
+    local pid
+
+    apply_config
+    pid="$(ai_agent_pid)"
+
+    if [ -z "$pid" ]; then
+        log "ai_agent_pid=not_running"
+        log "trae_restart=not_needed"
+    elif ai_agent_uses_expected_proxy "$pid"; then
+        log "ai_agent_pid=$pid"
+        log "ai_agent_proxy_status=active"
+        log "trae_restart=not_needed"
+    else
+        log "ai_agent_pid=$pid"
+        log "ai_agent_proxy_status=stale_or_missing"
+        restart_trae
+    fi
+}
+
+ensure_disabled() {
+    local pid
+
+    remove_config
+    pid="$(ai_agent_pid)"
+
+    if [ -z "$pid" ]; then
+        log "ai_agent_pid=not_running"
+        log "trae_restart=not_needed"
+    elif ai_agent_has_managed_proxy "$pid"; then
+        log "ai_agent_pid=$pid"
+        log "ai_agent_proxy_status=still_active"
+        restart_trae
+    else
+        log "ai_agent_pid=$pid"
+        log "ai_agent_proxy_status=inactive"
+        log "trae_restart=not_needed"
+    fi
 }
 
 status() {
@@ -240,11 +326,10 @@ status() {
         failed=1
     fi
 
-    pid="$(pgrep -f '/modules/ai-agent/ai-agent$' | head -n 1 || true)"
+    pid="$(ai_agent_pid)"
     if [ -n "$pid" ]; then
         log "ai_agent_pid=$pid"
-        if tr '\0' '\n' <"/proc/$pid/environ" |
-            grep -Fqx "HTTP_PROXY=$PROXY_URL"; then
+        if ai_agent_uses_expected_proxy "$pid"; then
             log "ai_agent_proxy_status=active"
         else
             log "ai_agent_proxy_status=stale_or_missing"
@@ -268,6 +353,12 @@ validate_inputs
 trap cleanup_temp_profile EXIT
 
 case "$ACTION" in
+    enable)
+        ensure_enabled
+        ;;
+    disable)
+        ensure_disabled
+        ;;
     apply)
         apply_config
         ;;
@@ -293,6 +384,6 @@ case "$ACTION" in
         restart_trae
         ;;
     *)
-        die "usage: $0 {apply|apply-and-restart|verify|status|restart-trae|remove|remove-and-restart}"
+        die "usage: $0 {enable|disable|apply|apply-and-restart|verify|status|restart-trae|remove|remove-and-restart}"
         ;;
 esac
